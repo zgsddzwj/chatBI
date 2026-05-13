@@ -36,3 +36,14 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  docker-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare compose env
+        run: |
+          cp .env.example .env
+          sed -i 's/^DEEPSEEK_API_KEY=.*/DEEPSEEK_API_KEY=sk-ci-dummy-not-used-at-build/' .env
+      - name: Build images
+        run: docker compose build

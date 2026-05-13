@@ -1,19 +1,25 @@
+# ChatBI 一键部署编排
+# 使用：cp .env.example .env && 填写 DEEPSEEK_API_KEY 后
+#       docker compose up -d --build
+# 或：  make deploy
+
+name: chatbi
+
 services:
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: chatbi-backend
-    ports:
-      - "8000:8000"
     environment:
-      - APP_ENV=docker
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
-      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
-      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
-      - BUSINESS_DB_URL=sqlite:////app/data/business.db
-      - APP_DB_URL=sqlite:////app/data/app.db
-      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+      APP_ENV: docker
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+      BUSINESS_DB_URL: sqlite:////app/data/business.db
+      APP_DB_URL: sqlite:////app/data/app.db
+      CORS_ORIGINS: "http://127.0.0.1:${HTTP_PORT:-8080},http://localhost:${HTTP_PORT:-8080},http://127.0.0.1:${BACKEND_PUBLISH_PORT:-8000},http://localhost:${BACKEND_PUBLISH_PORT:-8000}"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - ./backend/data:/app/data
     restart: unless-stopped
@@ -28,7 +34,9 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 25s
+    ports:
+      - "${BACKEND_PUBLISH_PORT:-8000}:8000"
 
   frontend:
     build:
@@ -36,9 +44,14 @@ services:
       dockerfile: Dockerfile
     container_name: chatbi-frontend
     ports:
-      - "5173:5173"
-    environment:
-      - VITE_API_BASE_URL=http://localhost:8000
+      - "${HTTP_PORT:-8080}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/"]
+      interval: 20s
+      timeout: 3s
+      retries: 5
+      start_period: 10s

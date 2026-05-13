@@ -55,11 +55,15 @@ chatBI/
 │   │   ├── App.tsx                # 对话页主框架
 │   │   ├── api.ts                 # 接口封装
 │   │   └── types.ts
+│   ├── nginx.conf                 # 生产镜像内：静态资源 + /api 反代
 │   ├── package.json
 │   ├── vite.config.ts
 │   └── Dockerfile
-├── docker-compose.yml
-└── README.md
+├── docker-compose.yml             # 一键编排（前端 Nginx + 后端）
+├── .env.example                   # Compose / 部署用环境变量模板
+├── Makefile                       # make deploy / down / logs
+├── scripts/
+│   └── deploy.sh                  # 一键部署脚本（校验 API Key）
 ```
 
 ## 快速开始
@@ -95,21 +99,47 @@ npm run dev                                  # 默认 5173 端口
 
 打开 http://localhost:5173 即可对话。
 
-### 方案 B：Docker Compose 一键启动
+### 方案 B：Docker 一键交付部署（推荐生产演示 / 交付）
+
+仓库根目录提供 **多阶段构建的前端（Nginx 托管静态资源 + `/api` 反代后端）**，浏览器只需访问一个端口，无需配置浏览器跨域直连后端。
+
+**1. 准备环境变量**
 
 ```bash
-# 在仓库根目录创建 .env 文件
-echo "DEEPSEEK_API_KEY=sk-xxxxxxxx" > .env
-
-docker compose up --build
+cp .env.example .env
+# 编辑 .env，至少填写 DEEPSEEK_API_KEY；可按需修改 HTTP_PORT（默认 8080）
 ```
 
-- 前端：http://localhost:5173
-- 后端：http://localhost:8000  ·  API 文档：http://localhost:8000/docs
+**2. 一键启动**
+
+任选其一：
+
+```bash
+make deploy
+# 或
+bash scripts/deploy.sh
+# 或
+docker compose up -d --build
+```
+
+**3. 访问地址**
+
+| 入口 | 默认 URL | 说明 |
+|------|------------|------|
+| 对话界面 | http://127.0.0.1:8080/ | 由 Nginx 提供静态页，并将 `/api/*` 转发到后端 |
+| OpenAPI 文档 | http://127.0.0.1:8000/docs | 后端直连端口，便于联调 |
+| 存活探针 | http://127.0.0.1:8000/health | 编排 / 负载均衡健康检查 |
+| 就绪探针 | http://127.0.0.1:8000/ready | 应用库可连则 200，否则 503 |
+
+数据目录：`./backend/data` 挂载到容器内 SQLite，**重启不丢会话与业务 mock 库**。
+
+常用命令：`docker compose logs -f`、`docker compose down`。
+
+> **Windows**：请使用 Git Bash / WSL 执行 `bash scripts/deploy.sh`，或直接使用 Docker Desktop 中的 Compose 对上述命令等价操作。
 
 ## 质量保障（CI 与测试）
 
-- **GitHub Actions**：推送或 PR 至 `main` 时自动运行后端 `pytest` 与前端 `npm run build`（见 `.github/workflows/ci.yml`）。
+- **GitHub Actions**：推送或 PR 至 `main` 时运行后端 `pytest`、前端 `npm run build`，并执行 `docker compose build` 校验交付镜像可构建（见 `.github/workflows/ci.yml`）。
 - **本地测试**：
 
 ```bash
@@ -185,6 +215,7 @@ DEEPSEEK_MODEL=qwen-plus
 ## 演进路线
 
 - [x] CI（GitHub Actions）+ 核心路径单元测试（SQL 安全、图表推荐、HTTP 探针）
+- [x] Docker Compose 一键交付（Nginx 静态前端 + `/api` 反代、健康检查、`make deploy`）
 - [ ] 流式响应（SSE 打字机效果）
 - [ ] Schema 向量检索（pgvector）：大库场景下提升 SQL 准确率
 - [ ] 多数据源管理（前端可配置不同业务库）
