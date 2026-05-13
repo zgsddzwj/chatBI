@@ -28,6 +28,7 @@
 chatBI/
 ├── backend/                       # FastAPI 后端
 │   ├── app/
+│   │   ├── middleware/            # 请求 ID、安全响应头等
 │   │   ├── api/                   # 路由：chat / conversations / meta
 │   │   ├── services/
 │   │   │   ├── llm.py             # DeepSeek 客户端
@@ -40,6 +41,7 @@ chatBI/
 │   │   ├── database.py
 │   │   ├── config.py
 │   │   └── main.py
+│   ├── tests/                     # pytest：SQL 安全、图表、HTTP
 │   ├── pyproject.toml               # 依赖声明（uv）
 │   ├── uv.lock                      # 锁定版本（提交到 Git）
 │   ├── .python-version              # 本地默认 Python 3.11
@@ -105,6 +107,24 @@ docker compose up --build
 - 前端：http://localhost:5173
 - 后端：http://localhost:8000  ·  API 文档：http://localhost:8000/docs
 
+## 质量保障（CI 与测试）
+
+- **GitHub Actions**：推送或 PR 至 `main` 时自动运行后端 `pytest` 与前端 `npm run build`（见 `.github/workflows/ci.yml`）。
+- **本地测试**：
+
+```bash
+cd backend
+uv sync --group dev
+uv run pytest -q
+```
+
+## 运维与健康检查
+
+- **`GET /health`**：进程存活（不访问数据库，适合容器存活探针）。
+- **`GET /ready`**：校验应用库 `APP_DB_URL` 可执行 `SELECT 1`（失败返回 503，适合就绪探针摘流）。
+- **可观测性**：每个响应带 `X-Request-ID`（也可在请求头传入）；默认附加 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy`；对较大 JSON 响应启用 GZip（约 512 字节以上）。
+- **Docker Compose**：后端已配置 `healthcheck`（轮询 `/health`）。
+
 ## Mock 数据集
 
 为了让你不需要任何真实库就能体验，我们生成了一个电商场景的数据集：
@@ -164,6 +184,7 @@ DEEPSEEK_MODEL=qwen-plus
 
 ## 演进路线
 
+- [x] CI（GitHub Actions）+ 核心路径单元测试（SQL 安全、图表推荐、HTTP 探针）
 - [ ] 流式响应（SSE 打字机效果）
 - [ ] Schema 向量检索（pgvector）：大库场景下提升 SQL 准确率
 - [ ] 多数据源管理（前端可配置不同业务库）
