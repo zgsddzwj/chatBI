@@ -40,7 +40,9 @@ class LLMClient:
             temperature=temperature,
             response_format={"type": "json_object"},
         )
-        content = response.choices[0].message.content or "{}"
+        if not response.choices:
+            raise ValueError("LLM 未返回任何候选回复")
+        content = (response.choices[0].message.content or "").strip() or "{}"
         try:
             return json.loads(content)
         except json.JSONDecodeError as exc:
@@ -56,6 +58,8 @@ class LLMClient:
             ],
             temperature=temperature,
         )
+        if not response.choices:
+            return ""
         return (response.choices[0].message.content or "").strip()
 
 

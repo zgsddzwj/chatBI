@@ -67,7 +67,12 @@ def chat(payload: ChatRequest, db: Session = Depends(get_app_db)) -> ChatRespons
         )
         db.add(err_msg)
         db.commit()
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return ChatResponse(
+            type="error",
+            conversation_id=conversation.id,
+            message_id=err_msg.id,
+            error=str(exc),
+        )
 
     if result["type"] == "clarification":
         assistant_msg = Message(

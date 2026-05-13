@@ -44,6 +44,9 @@ const renderTable = (data: QueryResult) => {
   );
 };
 
+const isNumericKpiValue = (v: unknown): boolean =>
+  typeof v === "number" && Number.isFinite(v);
+
 export const ChartView: React.FC<Props> = ({ chart, data }) => {
   if (!chart || chart.type === "empty" || !data || data.row_count === 0) {
     return <Empty description="没有查询到匹配的数据" />;
@@ -54,15 +57,29 @@ export const ChartView: React.FC<Props> = ({ chart, data }) => {
   }
 
   if (chart.type === "kpi") {
+    const label = chart.label ?? "";
+    const value = chart.value;
+    const useProse = !isNumericKpiValue(value);
     return (
       <div className="kpi-card">
-        <div className="kpi-label">{chart.label}</div>
-        <div className="kpi-value">{formatValue(chart.value)}</div>
+        <div className="kpi-label">{label}</div>
+        <div className={useProse ? "kpi-value-prose" : "kpi-value"}>{formatValue(value)}</div>
       </div>
     );
   }
 
   if (chart.type === "pie") {
+    const raw = Array.isArray(chart.data) ? chart.data : [];
+    const pieData = raw.filter(
+      (d) =>
+        d &&
+        typeof d.name === "string" &&
+        typeof d.value === "number" &&
+        Number.isFinite(d.value),
+    );
+    if (!pieData.length) {
+      return <Empty description="当前结果无法绘制成饼图，已改为表格展示。" />;
+    }
     const option = {
       tooltip: { trigger: "item" },
       legend: { orient: "vertical", left: "left", textStyle: { fontSize: 12 } },
@@ -73,8 +90,8 @@ export const ChartView: React.FC<Props> = ({ chart, data }) => {
           type: "pie",
           radius: ["35%", "65%"],
           avoidLabelOverlap: true,
-          label: { show: true, formatter: "{b}: {d}%" },
-          data: chart.data,
+          label: { show: true, fontSize: 11, formatter: "{b}: {d}%" },
+          data: pieData,
         },
       ],
     };
@@ -82,6 +99,17 @@ export const ChartView: React.FC<Props> = ({ chart, data }) => {
   }
 
   if (chart.type === "bar" || chart.type === "line") {
+    const x = Array.isArray(chart.x) ? chart.x : [];
+    const seriesList = Array.isArray(chart.series) ? chart.series : [];
+    if (!x.length || !seriesList.length) {
+      return <Empty description="图表数据不完整，已改为表格展示。" />;
+    }
+    const badSeries = seriesList.some(
+      (s) => !s || !Array.isArray(s.data) || s.data.length !== x.length,
+    );
+    if (badSeries) {
+      return renderTable(data);
+    }
     const option = {
       tooltip: { trigger: "axis" },
       legend: { top: 0, textStyle: { fontSize: 12 } },
@@ -89,10 +117,10 @@ export const ChartView: React.FC<Props> = ({ chart, data }) => {
       color: PALETTE,
       xAxis: {
         type: "category",
-        data: chart.x,
+        data: x,
         name: chart.x_label,
         axisLabel: {
-          rotate: chart.x.length > 6 ? 30 : 0,
+          rotate: x.length > 6 ? 30 : 0,
           fontSize: 11,
         },
       },
@@ -100,7 +128,7 @@ export const ChartView: React.FC<Props> = ({ chart, data }) => {
         type: "value",
         name: chart.y_label,
       },
-      series: chart.series.map((s) => ({
+      series: seriesList.map((s) => ({
         name: s.name,
         type: chart.type,
         data: s.data,

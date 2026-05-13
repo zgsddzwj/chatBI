@@ -66,7 +66,12 @@ class NL2SQLService:
 
     def generate_sql(self, question: str, history: list[dict[str, str]] | None = None) -> dict[str, Any]:
         prompt = self._build_user_prompt(question, history)
-        result = self._llm.chat_json(SQL_SYSTEM_PROMPT, prompt, temperature=0.0)
+        try:
+            result = self._llm.chat_json(SQL_SYSTEM_PROMPT, prompt, temperature=0.0)
+        except ValueError as exc:
+            raise NL2SQLError(str(exc)) from exc
+        if not isinstance(result, dict):
+            raise NL2SQLError("模型返回格式异常，无法解析为 JSON 对象")
         if result.get("needs_clarification"):
             return {
                 "needs_clarification": True,
@@ -126,7 +131,12 @@ class NL2SQLService:
         sql = sql_result["sql"]
         data = self.execute_sql(sql)
         chart = recommend_chart(data["columns"], data["rows"])
-        summary = self.summarize(question, sql, data) if data["row_count"] > 0 else "未查询到匹配数据。"
+        if data["row_count"] > 0:
+            summary = (self.summarize(question, sql, data) or "").strip()
+            if not summary:
+                summary = f"查询完成，共返回 {data['row_count']} 行结果。"
+        else:
+            summary = "未查询到匹配数据。"
 
         return {
             "type": "answer",

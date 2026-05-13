@@ -9,6 +9,22 @@ import {
 import type { ChartSpec, QueryResult } from "../types";
 import { ChartView } from "./ChartView";
 
+function normalizeQueryResult(raw: QueryResult | null | undefined): QueryResult | null {
+  if (!raw) return null;
+  const columns = Array.isArray(raw.columns) ? raw.columns.map(String) : [];
+  const rows = Array.isArray(raw.rows) ? raw.rows : [];
+  const n = columns.length;
+  const safeRows = rows.map((row) => {
+    const r = Array.isArray(row) ? row : [];
+    if (n <= 0) return r;
+    const copy = r.slice(0, n);
+    while (copy.length < n) copy.push(null);
+    return copy;
+  });
+  const row_count = typeof raw.row_count === "number" ? raw.row_count : safeRows.length;
+  return { columns, rows: safeRows, row_count };
+}
+
 interface Props {
   summary?: string | null;
   sql?: string | null;
@@ -43,18 +59,21 @@ const renderTable = (data: QueryResult) => {
         <tbody>
           {data.rows.slice(0, 100).map((row, i) => (
             <tr key={i}>
-              {row.map((v, j) => (
-                <td
-                  key={j}
-                  style={{
-                    border: "1px solid #e8ebf3",
-                    padding: "5px 10px",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {v === null || v === undefined ? "-" : String(v)}
-                </td>
-              ))}
+              {data.columns.map((_, j) => {
+                const v = row[j];
+                return (
+                  <td
+                    key={j}
+                    style={{
+                      border: "1px solid #e8ebf3",
+                      padding: "5px 10px",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {v === null || v === undefined ? "-" : String(v)}
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
@@ -76,7 +95,8 @@ export const AssistantMessage: React.FC<Props> = ({
   error,
   clarification,
 }) => {
-  const [tab, setTab] = useState<string>("chart");
+  const [tab, setTab] = useState<string>(() => (chart?.type === "table" ? "table" : "chart"));
+  const safeData = normalizeQueryResult(data);
 
   if (error) {
     return (
@@ -96,10 +116,13 @@ export const AssistantMessage: React.FC<Props> = ({
     );
   }
 
-  const copySQL = () => {
-    if (sql) {
-      navigator.clipboard.writeText(sql);
+  const copySQL = async () => {
+    if (!sql) return;
+    try {
+      await navigator.clipboard.writeText(sql);
       msgApi.success("SQL 已复制");
+    } catch {
+      msgApi.error("复制失败，请检查浏览器权限");
     }
   };
 
@@ -107,7 +130,11 @@ export const AssistantMessage: React.FC<Props> = ({
     <div className="assistant-card">
       {summary && <div className="assistant-summary">{summary}</div>}
 
-      {data && data.row_count > 0 && (
+      {safeData && safeData.row_count > 0 && !safeData.columns.length && (
+        <div style={{ color: "#9aa0b5", fontSize: 13 }}>返回数据缺少列信息，无法展示表格。</div>
+      )}
+
+      {safeData && safeData.row_count > 0 && safeData.columns.length > 0 && (
         <Tabs
           activeKey={tab}
           onChange={setTab}
@@ -120,16 +147,16 @@ export const AssistantMessage: React.FC<Props> = ({
                   <BarChartOutlined /> 图表
                 </span>
               ),
-              children: <ChartView chart={chart} data={data} />,
+              children: <ChartView chart={chart} data={safeData} />,
             },
             {
               key: "table",
               label: (
                 <span>
-                  <TableOutlined /> 数据 ({data.row_count})
+                  <TableOutlined /> 数据 ({safeData.row_count})
                 </span>
               ),
-              children: renderTable(data),
+              children: renderTable(safeData),
             },
             {
               key: "sql",
@@ -142,12 +169,12 @@ export const AssistantMessage: React.FC<Props> = ({
                 <div>
                   <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
                     <Tooltip title="复制 SQL">
-                      <Button size="small" icon={<CopyOutlined />} onClick={copySQL}>
+                      <Button size="small" icon={<CopyOutlined />} onClick={() => void copySQL()}>
                         复制
                       </Button>
                     </Tooltip>
                   </div>
-                  <pre className="sql-block">{sql}</pre>
+                  <pre className="sql-block">{sql ?? "（无 SQL）"}</pre>
                 </div>
               ),
             },
@@ -155,7 +182,7 @@ export const AssistantMessage: React.FC<Props> = ({
         />
       )}
 
-      {data && data.row_count === 0 && (
+      {safeData && safeData.row_count === 0 && (
         <div style={{ color: "#9aa0b5", fontSize: 13 }}>未查询到匹配数据。</div>
       )}
     </div>

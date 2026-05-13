@@ -2,7 +2,7 @@
 
 策略（启发式，简单可靠）:
 - 0 行    -> 空
-- 1 行 1 列 -> KPI 卡片
+- 1 行 1 列且值为数字 -> KPI 卡片；否则（如闲聊返回的长文本字面量）-> 表格，避免大字号展示整段话
 - 1 列   -> 表格
 - 2 列 (类别 + 数值) -> 行数 <= 8 走 pie/donut；否则 bar
 - 时间维度 + 数值     -> line
@@ -48,11 +48,10 @@ def recommend_chart(columns: list[str], rows: list[list[Any]]) -> dict[str, Any]
     n_rows = len(rows)
 
     if n_rows == 1 and n_cols == 1:
-        return {
-            "type": "kpi",
-            "label": columns[0],
-            "value": rows[0][0],
-        }
+        cell = rows[0][0]
+        if _is_number(cell):
+            return {"type": "kpi", "label": columns[0], "value": cell}
+        return {"type": "table"}
 
     if n_cols == 1:
         return {"type": "table"}

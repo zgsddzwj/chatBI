@@ -27,6 +27,32 @@ import type {
 } from "./types";
 import { AssistantMessage } from "./components/AssistantMessage";
 
+function formatApiErrorDetail(detail: unknown): string {
+  if (detail == null) return "";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item: { msg?: string; loc?: unknown } | string) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && typeof item.msg === "string") return item.msg;
+        try {
+          return JSON.stringify(item);
+        } catch {
+          return String(item);
+        }
+      })
+      .join("；");
+  }
+  if (typeof detail === "object") {
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return String(detail);
+    }
+  }
+  return String(detail);
+}
+
 interface UIMessage extends Omit<Partial<MessageHistory>, "id"> {
   id: number | string;
   role: "user" | "assistant";
@@ -91,12 +117,19 @@ export default function App() {
   };
 
   const removeConversation = async (id: number) => {
-    await deleteConversation(id);
-    msgApi.success("已删除");
-    if (activeId === id) {
-      newConversation();
+    try {
+      await deleteConversation(id);
+      msgApi.success("已删除");
+      if (activeId === id) {
+        newConversation();
+      }
+      loadConversations();
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { detail?: unknown } }; message?: string };
+      const detail =
+        formatApiErrorDetail(ax?.response?.data?.detail) || ax?.message || "删除失败";
+      msgApi.error(detail);
     }
-    loadConversations();
   };
 
   const sendQuestion = async (question: string) => {
@@ -153,7 +186,9 @@ export default function App() {
 
       loadConversations();
     } catch (err: any) {
-      const detail = err?.response?.data?.detail || err?.message || "未知错误";
+      const raw = err?.response?.data?.detail;
+      const detail =
+        formatApiErrorDetail(raw) || err?.message || "未知错误";
       setMessages((prev) => {
         const next = [...prev];
         const idx = next.findIndex((m) => m.id === placeholder.id);
