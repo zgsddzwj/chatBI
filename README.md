@@ -7,7 +7,7 @@
 | 层 | 选型 |
 |---|---|
 | 前端 | React 18 + TypeScript + Vite + Ant Design + ECharts |
-| 后端 | Python 3.11 + FastAPI + SQLAlchemy |
+| 后端 | Python 3.11 + **uv** + FastAPI + SQLAlchemy |
 | LLM | DeepSeek (通过 OpenAI SDK 协议，**可一键切换** GPT/Qwen) |
 | 业务数据库 | SQLite（mock 数据，可平滑迁移到 PostgreSQL/MySQL） |
 | 应用数据库 | SQLite（会话/消息历史） |
@@ -40,7 +40,9 @@ chatBI/
 │   │   ├── database.py
 │   │   ├── config.py
 │   │   └── main.py
-│   ├── requirements.txt
+│   ├── pyproject.toml               # 依赖声明（uv）
+│   ├── uv.lock                      # 锁定版本（提交到 Git）
+│   ├── .python-version              # 本地默认 Python 3.11
 │   ├── Dockerfile
 │   └── .env.example
 ├── frontend/                      # React 前端
@@ -63,7 +65,7 @@ chatBI/
 ### 前置条件
 
 - **DeepSeek API Key**：到 https://platform.deepseek.com 申请
-- 本地开发：Python 3.10+、Node.js 18+
+- 本地开发：**[uv](https://docs.astral.sh/uv/getting-started/installation/)**（Python 环境/依赖）、Node.js 18+
 - 或：Docker / Docker Compose
 
 ### 方案 A：本地直接运行（推荐用于开发调试）
@@ -72,13 +74,14 @@ chatBI/
 
 ```bash
 cd backend
-python -m venv ../.venv
-../.venv/bin/pip install -r requirements.txt
+uv sync                                      # 按 uv.lock 创建 .venv 并安装依赖
 cp .env.example .env
 # 编辑 .env，把 DEEPSEEK_API_KEY 填上
-../.venv/bin/python -m app.seed              # 生成 mock 数据（首次必跑）
-../.venv/bin/uvicorn app.main:app --reload   # 启动后端，默认 8000 端口
+uv run python -m app.seed                    # 生成 mock 数据（首次必跑）
+uv run uvicorn app.main:app --reload         # 启动后端，默认 8000 端口
 ```
+
+依赖变更时：改 `pyproject.toml` 后执行 `uv lock` 更新 `uv.lock`，再 `uv sync`。新增包也可用 `uv add 包名`。
 
 **2. 启动前端**
 
