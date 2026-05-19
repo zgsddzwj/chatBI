@@ -28,6 +28,9 @@ import type {
   ChartSpec,
 } from "./types";
 import { AssistantMessage } from "./components/AssistantMessage";
+import { LoginModal } from "./components/LoginModal";
+import { getAuth, clearAuth, type AuthUser } from "./auth";
+import { getMe } from "./api";
 
 function formatApiErrorDetail(detail: unknown): string {
   if (detail == null) return "";
@@ -71,7 +74,21 @@ export default function App() {
   const [samples, setSamples] = useState<string[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(getAuth().user);
+  const [loginOpen, setLoginOpen] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const auth = getAuth();
+    if (auth.token) {
+      getMe()
+        .then((u) => setUser(u))
+        .catch(() => {
+          clearAuth();
+          setUser(null);
+        });
+    }
+  }, []);
 
   const loadConversations = async () => {
     try {
@@ -368,9 +385,25 @@ export default function App() {
       <main className="main">
         <header className="main-header">
           <h2>对话式数据分析</h2>
-          <Tooltip title="后端: FastAPI + DeepSeek · 前端: React + AntD + ECharts">
-            <span className="message-meta">v0.1 · 产品级原型</span>
-          </Tooltip>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {user ? (
+              <>
+                <span style={{ fontSize: 13, color: "#6b7184" }}>
+                  {user.display_name || user.username}
+                </span>
+                <Button size="small" onClick={() => { clearAuth(); setUser(null); }}>
+                  退出
+                </Button>
+              </>
+            ) : (
+              <Button size="small" type="primary" onClick={() => setLoginOpen(true)}>
+                登录
+              </Button>
+            )}
+            <Tooltip title="后端: FastAPI + DeepSeek · 前端: React + AntD + ECharts">
+              <span className="message-meta">v0.2 · 产品级原型</span>
+            </Tooltip>
+          </div>
         </header>
 
         <div className="chat-area" ref={chatRef}>
@@ -436,6 +469,14 @@ export default function App() {
           <div className="tip">仅支持只读 SELECT 查询 · LLM 生成的结果请人工核对</div>
         </div>
       </main>
+      <LoginModal
+        open={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onSuccess={() => {
+          const auth = getAuth();
+          if (auth.user) setUser(auth.user);
+        }}
+      />
     </div>
   );
 }

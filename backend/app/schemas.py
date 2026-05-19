@@ -88,3 +88,38 @@ class TaskResponse(BaseModel):
     created_at: datetime | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    display_name: str | None = None
+    role: str
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserOut
+
+
+class UserCreateRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=6, max_length=100)
+    display_name: str | None = None
+
+
+class AuditLogOut(BaseModel):
+    id: int
+    user_id: int | None = None
+    username: str | None = None
+    action: str
+    resource: str | None = None
+    detail: str | None = None
+    ip_address: str | None = None
+    created_at: datetime | None = None

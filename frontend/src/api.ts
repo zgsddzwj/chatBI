@@ -4,10 +4,19 @@ import type {
   Conversation,
   ConversationDetail,
 } from "./types";
+import { getToken } from "./auth";
 
 const api = axios.create({
   baseURL: "/",
   timeout: 90000,
+});
+
+api.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 export interface ChatPayload {
@@ -102,4 +111,35 @@ export const deleteConversation = async (id: number): Promise<void> => {
 export const getSamples = async (): Promise<string[]> => {
   const { data } = await api.get<{ questions: string[] }>("/api/meta/samples");
   return data.questions;
+};
+
+export interface LoginPayload {
+  username: string;
+  password: string;
+}
+
+export interface LoginResult {
+  access_token: string;
+  token_type: string;
+  user: {
+    id: number;
+    username: string;
+    display_name: string | null;
+    role: string;
+  };
+}
+
+export const login = async (payload: LoginPayload): Promise<LoginResult> => {
+  const { data } = await api.post<LoginResult>("/api/auth/login", payload);
+  return data;
+};
+
+export const register = async (payload: LoginPayload & { display_name?: string }): Promise<LoginResult["user"]> => {
+  const { data } = await api.post<LoginResult["user"]>("/api/auth/register", payload);
+  return data;
+};
+
+export const getMe = async (): Promise<LoginResult["user"]> => {
+  const { data } = await api.get<LoginResult["user"]>("/api/auth/me");
+  return data;
 };

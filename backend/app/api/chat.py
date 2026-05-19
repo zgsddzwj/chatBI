@@ -4,13 +4,14 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_app_db
 from app.models import Conversation, Message
 from app.schemas import ChatRequest, ChatResponse
+from app.services.auth import decode_access_token, get_user_by_id, log_audit
 from app.services.nl2sql import NL2SQLError, get_nl2sql_service
 
 logger = logging.getLogger(__name__)
@@ -18,8 +19,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
+def _get_user_id(request: Request) -> int | None:
+    """从请求头提取用户 ID。"""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        payload = decode_access_token(auth[7:])
+        if payload:
+            return int(payload["sub"])
+    return None
+
+
 @router.post("", response_model=ChatResponse)
-def chat(payload: ChatRequest, db: Session = Depends(get_app_db)) -> ChatResponse:
+def chat(payload: ChatRequest, request: Request, db: Session = Depends(get_app_db)) -> ChatResponse:
     if payload.conversation_id:
         conversation = db.get(Conversation, payload.conversation_id)
         if not conversation:
@@ -41,10 +52,14 @@ def chat(payload: ChatRequest, db: Session = Depends(get_app_db)) -> ChatRespons
     history_payload = [h.model_dump() for h in payload.history]
     service = get_nl2sql_service()
 
+    user_id = _get_user_id(request)
+    ip = request.client.host if request.client else None
+
     try:
         result = service.ask(payload.question, history=history_payload)
     except NL2SQLError as exc:
         logger.warning("NL2SQL 失败: %s", exc)
+        log_audit(user_id, "chat_error", resource=f"conv:{conversation.id}", detail=str(exc)[:200], ip=ip)
         err_msg = Message(
             conversation_id=conversation.id,
             role="assistant",
@@ -61,6 +76,7 @@ def chat(payload: ChatRequest, db: Session = Depends(get_app_db)) -> ChatRespons
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("处理对话时发生未预期错误")
+        log_audit(user_id, "chat_error", resource=f"conv:{conversation.id}", detail=str(exc)[:200], ip=ip)
         err_msg = Message(
             conversation_id=conversation.id,
             role="assistant",
@@ -102,6 +118,8 @@ def chat(payload: ChatRequest, db: Session = Depends(get_app_db)) -> ChatRespons
     )
     db.add(assistant_msg)
     db.commit()
+
+    log_audit(user_id, "chat", resource=f"conv:{conversation.id}", detail=f"sql={result['sql'][:100]}", ip=ip)
 
     return ChatResponse(
         type="answer",
