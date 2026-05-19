@@ -10,7 +10,7 @@ from sqlalchemy import text
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.responses import JSONResponse
 
-from app.api import chat, conversations, meta
+from app.api import chat, conversations, meta, tasks
 from app.config import get_settings
 from app.database import AppBase, app_engine
 from app.middleware.http import RequestIdMiddleware, SecurityHeadersMiddleware
@@ -83,3 +83,4 @@ def ready() -> JSONResponse:
 app.include_router(chat.router)
 app.include_router(conversations.router)
 app.include_router(meta.router)
+app.include_router(tasks.router)

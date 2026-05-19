@@ -9,6 +9,7 @@ from sqlalchemy import text
 from app.config import get_settings
 from app.database import business_engine
 from app.schema_meta import render_schema_prompt
+from app.services.cache import get_cached, set_cache
 from app.services.chart import recommend_chart
 from app.services.llm import get_llm
 from app.services.sql_safety import UnsafeSQLError, ensure_limit, validate_sql
@@ -93,6 +94,12 @@ class NL2SQLService:
         }
 
     def execute_sql(self, sql: str) -> dict[str, Any]:
+        # 先查缓存
+        cached = get_cached(sql)
+        if cached:
+            logger.info("SQL 缓存命中: %s", sql[:80])
+            return cached
+
         try:
             with business_engine.connect() as conn:
                 cursor = conn.execute(text(sql))
@@ -101,7 +108,9 @@ class NL2SQLService:
         except Exception as exc:  # noqa: BLE001
             logger.exception("SQL 执行失败")
             raise NL2SQLError(f"SQL 执行失败: {exc}") from exc
-        return {"columns": columns, "rows": rows, "row_count": len(rows)}
+
+        result = {"columns": columns, "rows": rows, "row_count": len(rows)}
+        return result
 
     def summarize(self, question: str, sql: str, data: dict[str, Any]) -> str:
         preview_rows = data["rows"][:20]
@@ -135,6 +144,9 @@ class NL2SQLService:
         sql = sql_result["sql"]
         data = self.execute_sql(sql)
         chart = recommend_chart(data["columns"], data["rows"])
+
+        # 缓存结果
+        set_cache(sql, data, chart)
         if data["row_count"] > 0:
             summary = (self.summarize(question, sql, data) or "").strip()
             if not summary:

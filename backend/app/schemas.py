@@ -73,3 +73,18 @@ class SchemaInfo(BaseModel):
 
 class SampleQuestions(BaseModel):
     questions: list[str]
+
+
+class TaskCreateRequest(BaseModel):
+    sql: str = Field(..., min_length=1)
+    row_limit: int = Field(default=1000, ge=1, le=50_000)
+
+
+class TaskResponse(BaseModel):
+    task_id: str
+    status: str
+    result: dict[str, Any] | None = None
+    error: str | None = None
+    created_at: datetime | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
