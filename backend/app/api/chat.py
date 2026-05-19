@@ -1,9 +1,11 @@
 """对话接口。"""
 from __future__ import annotations
 
+import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_app_db
@@ -110,4 +112,124 @@ def chat(payload: ChatRequest, db: Session = Depends(get_app_db)) -> ChatRespons
         data=result["data"],
         chart=result["chart"],
         summary=result["summary"],
+    )
+
+
+@router.post("/stream")
+def chat_stream(payload: ChatRequest, db: Session = Depends(get_app_db)) -> StreamingResponse:
+    """SSE 流式对话：逐阶段推送 thinking / sql / data / chart / summary。"""
+
+    def event(data: dict) -> str:
+        return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    def generate():
+        if payload.conversation_id:
+            conversation = db.get(Conversation, payload.conversation_id)
+            if not conversation:
+                yield event({"type": "error", "error": "会话不存在"})
+                return
+        else:
+            title = payload.question[:30] + ("…" if len(payload.question) > 30 else "")
+            conversation = Conversation(title=title)
+            db.add(conversation)
+            db.flush()
+
+        user_msg = Message(
+            conversation_id=conversation.id,
+            role="user",
+            content=payload.question,
+        )
+        db.add(user_msg)
+        db.flush()
+
+        yield event({"type": "thinking", "conversation_id": conversation.id})
+
+        history_payload = [h.model_dump() for h in payload.history]
+        service = get_nl2sql_service()
+
+        try:
+            sql_result = service.generate_sql(payload.question, history=history_payload)
+        except NL2SQLError as exc:
+            logger.warning("NL2SQL 生成 SQL 失败: %s", exc)
+            err_msg = Message(
+                conversation_id=conversation.id,
+                role="assistant",
+                content="抱歉，我没能完成这次查询。",
+                error=str(exc),
+            )
+            db.add(err_msg)
+            db.commit()
+            yield event({"type": "error", "conversation_id": conversation.id, "error": str(exc)})
+            return
+
+        if sql_result.get("needs_clarification"):
+            clarification = sql_result.get("clarification") or "你的问题信息不够，能否补充？"
+            assistant_msg = Message(
+                conversation_id=conversation.id,
+                role="assistant",
+                content=clarification,
+            )
+            db.add(assistant_msg)
+            db.commit()
+            yield event({"type": "clarification", "conversation_id": conversation.id, "clarification": clarification})
+            return
+
+        sql = sql_result["sql"]
+        explanation = sql_result.get("explanation", "")
+        yield event({"type": "sql", "conversation_id": conversation.id, "sql": sql, "explanation": explanation})
+
+        try:
+            data = service.execute_sql(sql)
+        except NL2SQLError as exc:
+            logger.warning("SQL 执行失败: %s", exc)
+            err_msg = Message(
+                conversation_id=conversation.id,
+                role="assistant",
+                content="SQL 执行失败。",
+                error=str(exc),
+            )
+            db.add(err_msg)
+            db.commit()
+            yield event({"type": "error", "conversation_id": conversation.id, "error": str(exc)})
+            return
+
+        yield event({"type": "data", "conversation_id": conversation.id, "data": data})
+
+        chart = service.recommend_chart(data["columns"], data["rows"])
+        yield event({"type": "chart", "conversation_id": conversation.id, "chart": chart})
+
+        if data["row_count"] > 0:
+            summary = (service.summarize(payload.question, sql, data) or "").strip()
+            if not summary:
+                summary = f"查询完成，共返回 {data['row_count']} 行结果。"
+        else:
+            summary = "未查询到匹配数据。"
+
+        # 打字机效果：逐字推送 summary
+        for i in range(1, len(summary) + 1):
+            chunk = summary[:i]
+            yield event({"type": "summary_chunk", "conversation_id": conversation.id, "chunk": chunk, "done": i == len(summary)})
+
+        assistant_msg = Message(
+            conversation_id=conversation.id,
+            role="assistant",
+            content=summary,
+            sql=sql,
+            result=data,
+            chart=chart,
+            summary=summary,
+        )
+        db.add(assistant_msg)
+        db.commit()
+
+        yield event({"type": "done", "conversation_id": conversation.id, "message_id": assistant_msg.id})
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )

@@ -32,6 +32,7 @@ interface Props {
   chart?: ChartSpec | null;
   error?: string | null;
   clarification?: string | null;
+  streaming?: boolean;
 }
 
 const renderTable = (data: QueryResult) => {
@@ -94,6 +95,7 @@ export const AssistantMessage: React.FC<Props> = ({
   chart,
   error,
   clarification,
+  streaming,
 }) => {
   const [tab, setTab] = useState<string>(() => (chart?.type === "table" ? "table" : "chart"));
   const safeData = normalizeQueryResult(data);
@@ -128,7 +130,12 @@ export const AssistantMessage: React.FC<Props> = ({
 
   return (
     <div className="assistant-card">
-      {summary && <div className="assistant-summary">{summary}</div>}
+      {summary && (
+        <div className="assistant-summary">
+          {summary}
+          {streaming && <span className="typing-cursor" />}
+        </div>
+      )}
 
       {safeData && safeData.row_count > 0 && !safeData.columns.length && (
         <div style={{ color: "#9aa0b5", fontSize: 13 }}>返回数据缺少列信息，无法展示表格。</div>

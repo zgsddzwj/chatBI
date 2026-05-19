@@ -18,12 +18,14 @@ import {
   getConversation,
   getSamples,
   listConversations,
-  sendChat,
+  sendChatStream,
+  type StreamEvent,
 } from "./api";
 import type {
-  ChatAnswer,
   Conversation,
   MessageHistory,
+  QueryResult,
+  ChartSpec,
 } from "./types";
 import { AssistantMessage } from "./components/AssistantMessage";
 
@@ -59,6 +61,7 @@ interface UIMessage extends Omit<Partial<MessageHistory>, "id"> {
   content: string;
   pending?: boolean;
   clarification?: string | null;
+  streaming?: boolean;
 }
 
 export default function App() {
@@ -132,6 +135,8 @@ export default function App() {
     }
   };
 
+  const abortRef = useRef<(() => void) | null>(null);
+
   const sendQuestion = async (question: string) => {
     if (!question.trim() || loading) return;
 
@@ -145,6 +150,7 @@ export default function App() {
       role: "assistant",
       content: "",
       pending: true,
+      streaming: true,
     };
     setMessages((prev) => [...prev, userMsg, placeholder]);
     setInput("");
@@ -154,58 +160,152 @@ export default function App() {
       .filter((m) => !m.pending && m.content)
       .map((m) => ({ role: m.role, content: m.content }));
 
-    try {
-      const res: ChatAnswer = await sendChat({
+    let currentSql: string | undefined;
+    let currentExplanation: string | undefined;
+    let currentData: QueryResult | undefined;
+    let currentChart: ChartSpec | undefined;
+    let currentSummary = "";
+    let currentConvId: number | null = activeId;
+    let currentMsgId: number | string = placeholder.id;
+
+    abortRef.current = sendChatStream(
+      {
         question,
         conversation_id: activeId,
         history,
-      });
-
-      setActiveId(res.conversation_id);
-
-      setMessages((prev) => {
-        const next = [...prev];
-        const idx = next.findIndex((m) => m.id === placeholder.id);
-        if (idx >= 0) {
-          next[idx] = {
-            id: res.message_id,
-            role: "assistant",
-            content: res.summary || res.clarification || res.error || "",
-            sql: res.sql,
-            result: res.data,
-            chart: res.chart,
-            summary: res.summary,
-            error: res.error,
-            // clarification 也保存在 content 字段中用于回显
-            ...(res.clarification ? { content: res.clarification } : {}),
-          } as UIMessage;
-          (next[idx] as any).clarification = res.clarification;
+      },
+      (evt: StreamEvent) => {
+        if (evt.type === "thinking") {
+          setMessages((prev) => {
+            const next = [...prev];
+            const idx = next.findIndex((m) => m.id === placeholder.id);
+            if (idx >= 0) {
+              next[idx] = { ...next[idx], pending: true, streaming: true };
+            }
+            return next;
+          });
+          if (evt.conversation_id) {
+            currentConvId = evt.conversation_id;
+            setActiveId(evt.conversation_id);
+          }
+        } else if (evt.type === "sql") {
+          currentSql = evt.sql;
+          currentExplanation = evt.explanation;
+        } else if (evt.type === "data") {
+          currentData = evt.data as QueryResult;
+        } else if (evt.type === "chart") {
+          currentChart = evt.chart as ChartSpec;
+        } else if (evt.type === "summary_chunk") {
+          currentSummary = evt.chunk || "";
+          setMessages((prev) => {
+            const next = [...prev];
+            const idx = next.findIndex((m) => m.id === placeholder.id);
+            if (idx >= 0) {
+              next[idx] = {
+                ...next[idx],
+                id: currentMsgId,
+                role: "assistant",
+                content: currentSummary,
+                summary: currentSummary,
+                sql: currentSql,
+                result: currentData,
+                chart: currentChart,
+                pending: false,
+                streaming: !evt.done,
+              };
+            }
+            return next;
+          });
+        } else if (evt.type === "clarification") {
+          setMessages((prev) => {
+            const next = [...prev];
+            const idx = next.findIndex((m) => m.id === placeholder.id);
+            if (idx >= 0) {
+              next[idx] = {
+                ...next[idx],
+                id: currentMsgId,
+                role: "assistant",
+                content: evt.clarification || "",
+                clarification: evt.clarification || null,
+                pending: false,
+                streaming: false,
+              };
+            }
+            return next;
+          });
+          setLoading(false);
+          loadConversations();
+        } else if (evt.type === "done") {
+          if (evt.conversation_id) {
+            currentConvId = evt.conversation_id;
+            setActiveId(evt.conversation_id);
+          }
+          if (evt.message_id) {
+            currentMsgId = evt.message_id;
+          }
+          setMessages((prev) => {
+            const next = [...prev];
+            const idx = next.findIndex((m) => m.id === placeholder.id);
+            if (idx >= 0) {
+              next[idx] = {
+                ...next[idx],
+                id: currentMsgId,
+                role: "assistant",
+                content: currentSummary,
+                summary: currentSummary,
+                sql: currentSql,
+                result: currentData,
+                chart: currentChart,
+                pending: false,
+                streaming: false,
+              };
+            }
+            return next;
+          });
+          setLoading(false);
+          loadConversations();
+        } else if (evt.type === "error") {
+          setMessages((prev) => {
+            const next = [...prev];
+            const idx = next.findIndex((m) => m.id === placeholder.id);
+            if (idx >= 0) {
+              next[idx] = {
+                ...next[idx],
+                id: `e-${Date.now()}`,
+                role: "assistant",
+                content: evt.error || "请求失败",
+                error: evt.error || "请求失败",
+                pending: false,
+                streaming: false,
+              };
+            }
+            return next;
+          });
+          setLoading(false);
+          msgApi.error(`请求失败: ${evt.error}`);
         }
-        return next;
-      });
-
-      loadConversations();
-    } catch (err: any) {
-      const raw = err?.response?.data?.detail;
-      const detail =
-        formatApiErrorDetail(raw) || err?.message || "未知错误";
-      setMessages((prev) => {
-        const next = [...prev];
-        const idx = next.findIndex((m) => m.id === placeholder.id);
-        if (idx >= 0) {
-          next[idx] = {
-            id: `e-${Date.now()}`,
-            role: "assistant",
-            content: detail,
-            error: detail,
-          };
-        }
-        return next;
-      });
-      msgApi.error(`请求失败: ${detail}`);
-    } finally {
-      setLoading(false);
-    }
+      },
+      (errMsg: string) => {
+        setMessages((prev) => {
+          const next = [...prev];
+          const idx = next.findIndex((m) => m.id === placeholder.id);
+          if (idx >= 0) {
+            next[idx] = {
+              ...next[idx],
+              id: `e-${Date.now()}`,
+              role: "assistant",
+              content: errMsg,
+              error: errMsg,
+              pending: false,
+              streaming: false,
+            };
+          }
+          return next;
+        });
+        setLoading(false);
+        msgApi.error(`请求失败: ${errMsg}`);
+      },
+    );
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -305,6 +405,7 @@ export default function App() {
                     chart={m.chart as any}
                     error={m.error}
                     clarification={(m as any).clarification}
+                    streaming={m.streaming}
                   />
                 )}
               </div>

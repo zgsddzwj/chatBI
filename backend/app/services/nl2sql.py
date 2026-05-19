@@ -51,6 +51,10 @@ class NL2SQLService:
         self._settings = get_settings()
         self._llm = get_llm()
 
+    def recommend_chart(self, columns: list[str], rows: list[list[Any]]) -> dict[str, Any]:
+        """暴露图表推荐方法，供流式接口调用。"""
+        return recommend_chart(columns, rows)
+
     def _build_user_prompt(self, question: str, history: list[dict[str, str]] | None) -> str:
         parts: list[str] = []
         parts.append("# 数据库 Schema\n")

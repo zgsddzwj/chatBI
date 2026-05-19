@@ -291,3 +291,19 @@ body {
   font-size: 12px;
   color: #9aa0b5;
 }
+
+/* SSE 流式打字机效果光标 */
+.typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  background: #5b8def;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink 0.8s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
