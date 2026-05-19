@@ -143,3 +143,17 @@ export const getMe = async (): Promise<LoginResult["user"]> => {
   const { data } = await api.get<LoginResult["user"]>("/api/auth/me");
   return data;
 };
+
+export interface DataSource {
+  id: number;
+  name: string;
+  db_type: string;
+  description?: string;
+  is_default: boolean;
+  is_active: boolean;
+}
+
+export const listDataSources = async (): Promise<DataSource[]> => {
+  const { data } = await api.get<DataSource[]>("/api/datasources");
+  return data;
+};

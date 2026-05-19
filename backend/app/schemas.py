@@ -123,3 +123,34 @@ class AuditLogOut(BaseModel):
     detail: str | None = None
     ip_address: str | None = None
     created_at: datetime | None = None
+
+
+class DataSourceCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    db_type: str = Field(default="sqlite")
+    connection_url: str = Field(..., min_length=1)
+    description: str | None = None
+    schema_config: dict[str, Any] | None = Field(default=None, alias="schema")
+
+    model_config = {"populate_by_name": True}
+
+
+class DataSourceUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    db_type: str | None = None
+    connection_url: str | None = Field(default=None, min_length=1)
+    description: str | None = None
+    schema_config: dict[str, Any] | None = Field(default=None, alias="schema")
+    is_active: bool | None = None
+    is_default: bool | None = None
+
+    model_config = {"populate_by_name": True}
+
+
+class DataSourceOut(BaseModel):
+    id: int
+    name: str
+    db_type: str
+    description: str | None = None
+    is_default: bool = False
+    is_active: bool = True
