@@ -9,6 +9,7 @@ from sqlalchemy import text
 from app.config import get_settings
 from app.database import business_engine
 from app.schema_meta import render_schema_prompt
+from app.services.schema_search import render_schema_prompt_filtered
 from app.services.cache import get_cached, set_cache
 from app.services.chart import recommend_chart
 from app.services.llm import get_llm
@@ -59,7 +60,8 @@ class NL2SQLService:
     def _build_user_prompt(self, question: str, history: list[dict[str, str]] | None) -> str:
         parts: list[str] = []
         parts.append("# 数据库 Schema\n")
-        parts.append(render_schema_prompt())
+        # 使用智能检索过滤相关表
+        parts.append(render_schema_prompt_filtered(question, top_k=3))
         if history:
             parts.append("\n# 最近的对话（用于理解上下文）")
             for h in history[-6:]:
