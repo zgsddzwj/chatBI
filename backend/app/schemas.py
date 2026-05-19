@@ -154,3 +154,24 @@ class DataSourceOut(BaseModel):
     description: str | None = None
     is_default: bool = False
     is_active: bool = True
+
+
+class CardCreate(BaseModel):
+    title: str = Field(..., min_length=1)
+    chart_type: str
+    chart: dict[str, Any]
+    data: dict[str, Any] | None = None
+    sql: str | None = None
+
+
+class DashboardCreate(BaseModel):
+    name: str = Field(..., min_length=1)
+    description: str | None = None
+
+
+class DashboardOut(BaseModel):
+    id: int
+    user_id: int
+    name: str
+    description: str | None = None
+    cards: list[dict[str, Any]] = Field(default_factory=list)

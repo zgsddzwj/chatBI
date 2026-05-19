@@ -20,6 +20,7 @@ import {
   listConversations,
   sendChatStream,
   type StreamEvent,
+  createCard,
 } from "./api";
 import type {
   Conversation,
@@ -439,6 +440,22 @@ export default function App() {
                     error={m.error}
                     clarification={(m as any).clarification}
                     streaming={m.streaming}
+                    onPin={
+                      m.chart && m.chart.type !== "empty" && m.chart.type !== "table"
+                        ? () => {
+                            const chart = m.chart!;
+                            createCard({
+                              title: m.summary?.slice(0, 30) || "未命名图表",
+                              chart_type: chart.type,
+                              chart: chart,
+                              data: m.result,
+                              sql: m.sql || undefined,
+                            })
+                              .then(() => msgApi.success("已收藏到仪表盘"))
+                              .catch(() => msgApi.error("收藏失败，请登录"));
+                          }
+                        : undefined
+                    }
                   />
                 )}
               </div>

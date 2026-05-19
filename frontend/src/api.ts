@@ -157,3 +157,48 @@ export const listDataSources = async (): Promise<DataSource[]> => {
   const { data } = await api.get<DataSource[]>("/api/datasources");
   return data;
 };
+
+export interface DashboardCard {
+  id: number;
+  title: string;
+  chart_type: string;
+  chart: any;
+  data?: any;
+  sql?: string;
+  created_at?: string;
+}
+
+export interface Dashboard {
+  id: number;
+  user_id: number;
+  name: string;
+  description?: string;
+  cards: DashboardCard[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const createCard = async (payload: Omit<DashboardCard, "id" | "created_at">): Promise<DashboardCard> => {
+  const { data } = await api.post<DashboardCard>("/api/dashboards/cards", payload);
+  return data;
+};
+
+export const listCards = async (): Promise<DashboardCard[]> => {
+  const { data } = await api.get<DashboardCard[]>("/api/dashboards/cards");
+  return data;
+};
+
+export const createDashboard = async (payload: { name: string; description?: string }): Promise<Dashboard> => {
+  const { data } = await api.post<Dashboard>("/api/dashboards", payload);
+  return data;
+};
+
+export const listDashboards = async (): Promise<Dashboard[]> => {
+  const { data } = await api.get<Dashboard[]>("/api/dashboards");
+  return data;
+};
+
+export const getDashboard = async (id: number): Promise<Dashboard> => {
+  const { data } = await api.get<Dashboard>(`/api/dashboards/${id}`);
+  return data;
+};
