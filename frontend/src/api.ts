@@ -202,3 +202,22 @@ export const getDashboard = async (id: number): Promise<Dashboard> => {
   const { data } = await api.get<Dashboard>(`/api/dashboards/${id}`);
   return data;
 };
+
+export const exportConversationMarkdown = async (conversationId: number): Promise<Blob> => {
+  const { data } = await api.get<Blob>(`/api/export/conversation/${conversationId}/markdown`, {
+    responseType: "blob",
+  });
+  return data;
+};
+
+export const exportConversationJson = async (conversationId: number): Promise<Blob> => {
+  const { data } = await api.get<Blob>(`/api/export/conversation/${conversationId}/json`, {
+    responseType: "blob",
+  });
+  return data;
+};
+
+export const createShareLink = async (conversationId: number): Promise<{ share_id: string; url: string; expires_in_hours: number }> => {
+  const { data } = await api.post<{ share_id: string; url: string; expires_in_hours: number }>(`/api/export/conversation/${conversationId}/share`);
+  return data;
+};

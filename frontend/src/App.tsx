@@ -6,12 +6,16 @@ import {
   Popconfirm,
   message as msgApi,
   Tooltip,
+  Dropdown,
+  Modal,
 } from "antd";
 import {
   PlusOutlined,
   SendOutlined,
   DeleteOutlined,
   BarChartOutlined,
+  ExportOutlined,
+  ShareAltOutlined,
 } from "@ant-design/icons";
 import {
   deleteConversation,
@@ -21,6 +25,9 @@ import {
   sendChatStream,
   type StreamEvent,
   createCard,
+  exportConversationMarkdown,
+  exportConversationJson,
+  createShareLink,
 } from "./api";
 import type {
   Conversation,
@@ -77,6 +84,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(getAuth().user);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
   const chatRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -135,6 +144,59 @@ export default function App() {
   const newConversation = () => {
     setActiveId(null);
     setMessages([]);
+  };
+
+  const handleExportMarkdown = async () => {
+    if (!activeId) {
+      msgApi.warning("请先选择一个对话");
+      return;
+    }
+    try {
+      const blob = await exportConversationMarkdown(activeId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `chatbi-conversation-${activeId}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+      msgApi.success("Markdown 导出成功");
+    } catch {
+      msgApi.error("导出失败");
+    }
+  };
+
+  const handleExportJson = async () => {
+    if (!activeId) {
+      msgApi.warning("请先选择一个对话");
+      return;
+    }
+    try {
+      const blob = await exportConversationJson(activeId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `chatbi-conversation-${activeId}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      msgApi.success("JSON 导出成功");
+    } catch {
+      msgApi.error("导出失败");
+    }
+  };
+
+  const handleShare = async () => {
+    if (!activeId) {
+      msgApi.warning("请先选择一个对话");
+      return;
+    }
+    try {
+      const res = await createShareLink(activeId);
+      const fullUrl = `${window.location.origin}${res.url}`;
+      setShareUrl(fullUrl);
+      setShareModalOpen(true);
+    } catch (err: any) {
+      msgApi.error(err?.response?.data?.detail || "创建分享链接失败");
+    }
   };
 
   const removeConversation = async (id: number) => {
@@ -387,6 +449,24 @@ export default function App() {
         <header className="main-header">
           <h2>对话式数据分析</h2>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {activeId && (
+              <>
+                <Dropdown
+                  menu={{
+                    items: [
+                      { key: "md", label: "导出 Markdown", onClick: handleExportMarkdown },
+                      { key: "json", label: "导出 JSON", onClick: handleExportJson },
+                      { key: "share", label: "生成分享链接", onClick: handleShare },
+                    ],
+                  }}
+                >
+                  <Button size="small" icon={<ExportOutlined />}>导出</Button>
+                </Dropdown>
+                <Tooltip title="生成分享链接">
+                  <Button size="small" icon={<ShareAltOutlined />} onClick={handleShare} />
+                </Tooltip>
+              </>
+            )}
             {user ? (
               <>
                 <span style={{ fontSize: 13, color: "#6b7184" }}>
@@ -402,7 +482,7 @@ export default function App() {
               </Button>
             )}
             <Tooltip title="后端: FastAPI + DeepSeek · 前端: React + AntD + ECharts">
-              <span className="message-meta">v0.2 · 产品级原型</span>
+              <span className="message-meta">v0.3 · 产品级原型</span>
             </Tooltip>
           </div>
         </header>
@@ -494,6 +574,32 @@ export default function App() {
           if (auth.user) setUser(auth.user);
         }}
       />
+      <Modal
+        title="分享链接"
+        open={shareModalOpen}
+        onCancel={() => setShareModalOpen(false)}
+        footer={[
+          <Button key="close" onClick={() => setShareModalOpen(false)}>
+            关闭
+          </Button>,
+          <Button
+            key="copy"
+            type="primary"
+            onClick={() => {
+              navigator.clipboard.writeText(shareUrl).then(() => msgApi.success("链接已复制"));
+            }}
+          >
+            复制链接
+          </Button>,
+        ]}
+      >
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 13, color: "#6b7184", marginBottom: 8 }}>
+            链接有效期 7 天，任何人可通过此链接查看对话内容：
+          </div>
+          <Input value={shareUrl} readOnly onFocus={(e) => e.target.select()} />
+        </div>
+      </Modal>
     </div>
   );
 }
