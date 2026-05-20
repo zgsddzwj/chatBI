@@ -307,3 +307,25 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
 }
+
+/* 性能优化：减少重绘 */
+.chat-area {
+  contain: layout style paint;
+  will-change: scroll-position;
+}
+
+/* 图片懒加载占位 */
+img[loading="lazy"] {
+  background: #f0f0f0;
+}
+
+/* 减少动画对性能的影响 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

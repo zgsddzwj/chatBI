@@ -36,7 +36,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(
     title="ChatBI API",
     description="自然语言对话式 BI 后端",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 

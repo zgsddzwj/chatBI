@@ -503,43 +503,45 @@ export default function App() {
               </div>
             </div>
           ) : (
-            messages.map((m) => (
-              <div key={m.id} className={`message ${m.role}`}>
-                {m.role === "user" ? (
-                  <div className="bubble">{m.content}</div>
-                ) : m.pending ? (
-                  <div className="assistant-card">
-                    <Spin /> <span style={{ marginLeft: 8, color: "#6b7184" }}>正在分析数据…</span>
-                  </div>
-                ) : (
-                  <AssistantMessage
-                    summary={m.summary || m.content}
-                    sql={m.sql}
-                    data={m.result as any}
-                    chart={m.chart as any}
-                    error={m.error}
-                    clarification={(m as any).clarification}
-                    streaming={m.streaming}
-                    onPin={
-                      m.chart && m.chart.type !== "empty" && m.chart.type !== "table"
-                        ? () => {
-                            const chart = m.chart!;
-                            createCard({
-                              title: m.summary?.slice(0, 30) || "未命名图表",
-                              chart_type: chart.type,
-                              chart: chart,
-                              data: m.result,
-                              sql: m.sql || undefined,
-                            })
-                              .then(() => msgApi.success("已收藏到仪表盘"))
-                              .catch(() => msgApi.error("收藏失败，请登录"));
-                          }
-                        : undefined
-                    }
-                  />
-                )}
-              </div>
-            ))
+            <>
+              {messages.map((m) => (
+                <div key={m.id} className={`message ${m.role}`}>
+                  {m.role === "user" ? (
+                    <div className="bubble">{m.content}</div>
+                  ) : m.pending ? (
+                    <div className="assistant-card">
+                      <Spin /> <span style={{ marginLeft: 8, color: "#6b7184" }}>正在分析数据…</span>
+                    </div>
+                  ) : (
+                    <AssistantMessage
+                      summary={m.summary || m.content}
+                      sql={m.sql}
+                      data={m.result as any}
+                      chart={m.chart as any}
+                      error={m.error}
+                      clarification={(m as any).clarification}
+                      streaming={m.streaming}
+                      onPin={
+                        m.chart && m.chart.type !== "empty" && m.chart.type !== "table"
+                          ? () => {
+                              const chart = m.chart!;
+                              createCard({
+                                title: m.summary?.slice(0, 30) || "未命名图表",
+                                chart_type: chart.type,
+                                chart: chart,
+                                data: m.result,
+                                sql: m.sql || undefined,
+                              })
+                                .then(() => msgApi.success("已收藏到仪表盘"))
+                                .catch(() => msgApi.error("收藏失败，请登录"));
+                            }
+                          : undefined
+                      }
+                    />
+                  )}
+                </div>
+              ))}
+            </>
           )}
         </div>
 
