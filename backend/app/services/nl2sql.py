@@ -14,6 +14,7 @@ from app.services.cache import get_cached, set_cache
 from app.services.chart import recommend_chart
 from app.services.llm import get_llm
 from app.services.sql_safety import UnsafeSQLError, ensure_limit, validate_sql
+from app.services.sql_fixer import try_fix_sql
 
 logger = logging.getLogger(__name__)
 
@@ -95,24 +96,47 @@ class NL2SQLService:
             "explanation": result.get("explanation", ""),
         }
 
-    def execute_sql(self, sql: str) -> dict[str, Any]:
+    def execute_sql(self, sql: str, question: str | None = None, max_retries: int = 2) -> dict[str, Any]:
+        """执行 SQL，失败时尝试自动纠错重试。"""
         # 先查缓存
         cached = get_cached(sql)
         if cached:
             logger.info("SQL 缓存命中: %s", sql[:80])
             return cached
 
-        try:
-            with business_engine.connect() as conn:
-                cursor = conn.execute(text(sql))
-                columns = list(cursor.keys())
-                rows = [list(r) for r in cursor.fetchall()]
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("SQL 执行失败")
-            raise NL2SQLError(f"SQL 执行失败: {exc}") from exc
+        last_error: str | None = None
+        current_sql = sql
 
-        result = {"columns": columns, "rows": rows, "row_count": len(rows)}
-        return result
+        for attempt in range(max_retries + 1):
+            try:
+                with business_engine.connect() as conn:
+                    cursor = conn.execute(text(current_sql))
+                    columns = list(cursor.keys())
+                    rows = [list(r) for r in cursor.fetchall()]
+                result = {"columns": columns, "rows": rows, "row_count": len(rows)}
+                # 如果经过修正，返回修正后的 SQL
+                if attempt > 0:
+                    result["fixed_sql"] = current_sql
+                return result
+            except Exception as exc:  # noqa: BLE001
+                last_error = str(exc)
+                logger.warning("SQL 执行失败 (attempt %d/%d): %s", attempt + 1, max_retries + 1, last_error[:200])
+
+                # 最后一次尝试，不再纠错
+                if attempt >= max_retries or not question:
+                    break
+
+                # 尝试纠错
+                schema_prompt = render_schema_prompt_filtered(question, top_k=3)
+                fix_result = try_fix_sql(question, current_sql, last_error, schema_prompt, self._settings.sql_row_limit)
+                if fix_result and not fix_result.get("needs_clarification"):
+                    current_sql = fix_result["sql"]
+                    logger.info("SQL 已修正: %s", current_sql[:100])
+                else:
+                    # 无法修正，直接抛出原错误
+                    break
+
+        raise NL2SQLError(f"SQL 执行失败: {last_error}")
 
     def summarize(self, question: str, sql: str, data: dict[str, Any]) -> str:
         preview_rows = data["rows"][:20]
@@ -144,7 +168,11 @@ class NL2SQLService:
             }
 
         sql = sql_result["sql"]
-        data = self.execute_sql(sql)
+        data = self.execute_sql(sql, question=question)
+        # 如果 SQL 被修正，使用修正后的版本
+        fixed_sql = data.pop("fixed_sql", None)
+        if fixed_sql:
+            sql = fixed_sql
         chart = recommend_chart(data["columns"], data["rows"])
 
         # 缓存结果

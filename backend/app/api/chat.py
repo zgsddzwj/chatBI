@@ -197,7 +197,11 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_app_db)) -> Stre
         yield event({"type": "sql", "conversation_id": conversation.id, "sql": sql, "explanation": explanation})
 
         try:
-            data = service.execute_sql(sql)
+            data = service.execute_sql(sql, question=payload.question)
+            # 如果 SQL 被修正，更新 sql 变量用于后续展示
+            fixed_sql = data.pop("fixed_sql", None)
+            if fixed_sql:
+                sql = fixed_sql
         except NL2SQLError as exc:
             logger.warning("SQL 执行失败: %s", exc)
             err_msg = Message(
