@@ -192,6 +192,7 @@ export function ChatPage() {
                 </div>
               ) : (
                 <AssistantMessage
+                  messageId={typeof m.id === "number" ? m.id : undefined}
                   summary={m.summary || m.content}
                   sql={m.sql}
                   data={m.result}
@@ -199,12 +200,12 @@ export function ChatPage() {
                   error={m.error}
                   clarification={m.clarification}
                   streaming={m.streaming}
-          onPin={
-            m.chart && m.chart.type !== "empty" && m.chart.type !== "table"
-              ? () => handlePin(m)
-              : undefined
-          }
-          onBookmark={() => handleBookmark(m)}
+                  onPin={
+                    m.chart && m.chart.type !== "empty" && m.chart.type !== "table"
+                      ? () => handlePin(m)
+                      : undefined
+                  }
+                  onBookmark={() => handleBookmark(m)}
                 />
               )}
             </div>

@@ -34,3 +34,15 @@ class Message(AppBase):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     conversation = relationship("Conversation", back_populates="messages")
+
+
+class Feedback(AppBase):
+    __tablename__ = "feedback"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    message_id = Column(Integer, ForeignKey("messages.id", ondelete="CASCADE"), nullable=False, index=True)
+    rating = Column(Integer, nullable=False)  # 1-5
+    comment = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    message = relationship("Message")

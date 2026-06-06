@@ -48,6 +48,7 @@ export const VirtualMessageList: React.FC<Props> = ({ messages, onPin, onBookmar
                 <div className="bubble">{m.content}</div>
               ) : (
                 <AssistantMessage
+                  messageId={typeof m.id === "number" ? m.id : undefined}
                   summary={m.summary || m.content}
                   sql={m.sql}
                   data={m.result as any}

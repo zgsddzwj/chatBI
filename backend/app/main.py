@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from starlette.middleware.gzip import GZipMiddleware
 
-from app.api import auth, chat, conversations, dashboard, datasource, export, meta, tasks
+from app.api import auth, chat, conversations, dashboard, datasource, export, feedback, meta, tasks
 from app.config import get_settings
 from app.database import AppBase, app_engine
 from app.middleware.http import RequestIdMiddleware, SecurityHeadersMiddleware
@@ -107,5 +107,6 @@ app.include_router(conversations.router)
 app.include_router(dashboard.router)
 app.include_router(datasource.router)
 app.include_router(export.router)
+app.include_router(feedback.router)
 app.include_router(meta.router)
 app.include_router(tasks.router)

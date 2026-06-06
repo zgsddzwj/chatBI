@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Tabs, Tag, Tooltip, Button, message as msgApi } from "antd";
+import { Tabs, Tag, Tooltip, Button, message as msgApi, Rate, Input } from "antd";
 import {
   BarChartOutlined,
   TableOutlined,
@@ -10,6 +10,7 @@ import {
 } from "@ant-design/icons";
 import type { ChartSpec, QueryResult } from "../types";
 import { ChartView } from "./ChartView";
+import { submitFeedback } from "../api";
 
 function normalizeQueryResult(raw: QueryResult | null | undefined): QueryResult | null {
   if (!raw) return null;
@@ -28,6 +29,7 @@ function normalizeQueryResult(raw: QueryResult | null | undefined): QueryResult 
 }
 
 interface Props {
+  messageId?: number;
   summary?: string | null;
   sql?: string | null;
   data?: QueryResult | null;
@@ -93,6 +95,7 @@ const renderTable = (data: QueryResult) => {
 };
 
 export const AssistantMessage: React.FC<Props> = ({
+  messageId,
   summary,
   sql,
   data,
@@ -104,7 +107,23 @@ export const AssistantMessage: React.FC<Props> = ({
   onBookmark,
 }) => {
   const [tab, setTab] = useState<string>(() => (chart?.type === "table" ? "table" : "chart"));
+  const [rating, setRating] = useState<number>(0);
+  const [comment, setComment] = useState<string>("");
+  const [feedbackSent, setFeedbackSent] = useState(false);
   const safeData = normalizeQueryResult(data);
+
+  const handleRate = async (value: number) => {
+    setRating(value);
+    if (messageId && value > 0) {
+      try {
+        await submitFeedback({ message_id: messageId, rating: value, comment: comment || undefined });
+        setFeedbackSent(true);
+        msgApi.success("感谢反馈！");
+      } catch {
+        msgApi.error("提交失败");
+      }
+    }
+  };
 
   if (error) {
     return (
@@ -209,6 +228,35 @@ export const AssistantMessage: React.FC<Props> = ({
 
       {safeData && safeData.row_count === 0 && (
         <div style={{ color: "#9aa0b5", fontSize: 13 }}>未查询到匹配数据。</div>
+      )}
+
+      {messageId && !streaming && !error && !clarification && (
+        <div style={{ marginTop: 12, paddingTop: 8, borderTop: "1px solid #e8ebf3" }}>
+          {feedbackSent ? (
+            <span style={{ fontSize: 13, color: "#10b981" }}>✓ 已收到反馈</span>
+          ) : (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 13, color: "#6b7184" }}>这个回答有帮助吗？</span>
+                <Rate value={rating} onChange={handleRate} style={{ fontSize: 16 }} />
+              </div>
+              {rating > 0 && (
+                <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                  <Input.TextArea
+                    placeholder="可选：留下具体建议..."
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    autoSize={{ minRows: 2, maxRows: 4 }}
+                    style={{ flex: 1 }}
+                  />
+                  <Button type="primary" size="small" onClick={() => handleRate(rating)}>
+                    提交
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       )}
     </div>
   );

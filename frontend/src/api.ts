@@ -213,3 +213,14 @@ export const createShareLink = async (conversationId: number): Promise<{ share_i
   const { data } = await api.post<{ share_id: string; url: string; expires_in_hours: number }>(`/api/export/conversation/${conversationId}/share`);
   return data;
 };
+
+export interface FeedbackPayload {
+  message_id: number;
+  rating: number;
+  comment?: string;
+}
+
+export const submitFeedback = async (payload: FeedbackPayload): Promise<{ id: number }> => {
+  const { data } = await api.post<{ id: number }>("/api/feedback", payload);
+  return data;
+};
