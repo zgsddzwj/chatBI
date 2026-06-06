@@ -10,28 +10,16 @@ from typing import Any
 
 from app.services.llm import get_llm
 from app.services.sql_safety import UnsafeSQLError, ensure_limit, validate_sql
+from app.prompt_loader import load_prompt
 
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 2
 
-FIX_SYSTEM_PROMPT = """你是一位资深的数据分析师，擅长修正错误的 SQL 查询。
 
-用户之前生成了一条 SQL，但执行时出错了。请根据错误信息修正 SQL。
-
-规则：
-1. 只生成 **SELECT** 查询，禁止任何写操作。
-2. 使用提供的表结构和字段，不要臆造表名或字段名。
-3. 使用 SQLite 语法（如日期处理用 strftime）。
-4. 输出必须是 **严格的 JSON 对象**，结构为：
-   {
-     "sql": "...",                 // 修正后的 SQL（单条 SELECT）
-     "explanation": "...",          // 一句话解释修正了什么
-     "needs_clarification": false,  // 若错误无法修正，则为 true
-     "clarification": ""            // 当 needs_clarification=true 时的说明
-   }
-5. SQL 中不要带分号结尾。
-"""
+def _get_fix_system_prompt() -> str:
+    """加载 SQL 纠错系统 Prompt。"""
+    return load_prompt("fix_sql")
 
 
 def _build_fix_prompt(question: str, original_sql: str, error_message: str, schema_prompt: str) -> str:
@@ -51,7 +39,7 @@ def try_fix_sql(question: str, original_sql: str, error_message: str, schema_pro
     prompt = _build_fix_prompt(question, original_sql, error_message, schema_prompt)
 
     try:
-        result = llm.chat_json(FIX_SYSTEM_PROMPT, prompt, temperature=0.1)
+        result = llm.chat_json(_get_fix_system_prompt(), prompt, temperature=0.1)
     except Exception as exc:  # noqa: BLE001
         logger.warning("SQL 纠错 LLM 调用失败: %s", exc)
         return None

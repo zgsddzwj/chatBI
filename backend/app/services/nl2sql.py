@@ -16,34 +16,19 @@ from app.services.llm import get_llm
 from app.services.hybrid_search import render_schema_prompt_hybrid
 from app.services.sql_fixer import try_fix_sql
 from app.services.sql_safety import UnsafeSQLError, ensure_limit, validate_sql
+from app.prompt_loader import load_prompt
 
 logger = logging.getLogger(__name__)
 
 
-SQL_SYSTEM_PROMPT = """你是一位资深的数据分析师，擅长将业务问题翻译成 SQL。
-
-请严格遵守以下规则：
-1. 只生成 **SELECT** 查询，禁止任何写操作。
-2. 使用提供的表结构和字段，不要臆造表名或字段名。
-3. 使用 SQLite 语法（如日期处理用 strftime）。
-4. 若需要按时间聚合，列名请使用易读别名，例如 month、year、date。
-5. 若问题涉及"销售额/营收/GMV"，使用 SUM(orders.amount)。
-6. 若问题涉及"已完成订单"或"有效订单"，加上 status IN ('paid','shipped','completed')。
-7. 输出必须是 **严格的 JSON 对象**，结构为：
-   {
-     "sql": "...",                 // 生成的 SQL（单条 SELECT）
-     "explanation": "...",          // 一句话解释 SQL 的含义
-     "needs_clarification": false,  // 若问题模糊无法生成 SQL，则为 true
-     "clarification": ""            // 当 needs_clarification=true 时的追问
-   }
-8. SQL 中不要带分号结尾。
-9. 默认按合理的维度排序（例如时间升序、金额降序）。
-"""
+def _get_sql_system_prompt() -> str:
+    """加载 SQL 生成系统 Prompt。"""
+    return load_prompt("sql_system")
 
 
-SUMMARY_SYSTEM_PROMPT = """你是一位数据分析助手。根据用户的问题、执行的 SQL 和查询结果，
-用简洁的中文回答用户（2-4 句话），突出关键数字、趋势或对比。
-不要重复展示完整数据，不要写代码块。"""
+def _get_summary_system_prompt() -> str:
+    """加载结果总结系统 Prompt。"""
+    return load_prompt("summary")
 
 
 class NL2SQLError(Exception):
@@ -76,7 +61,7 @@ class NL2SQLService:
     def generate_sql(self, question: str, history: list[dict[str, str]] | None = None) -> dict[str, Any]:
         prompt = self._build_user_prompt(question, history)
         try:
-            result = self._llm.chat_json(SQL_SYSTEM_PROMPT, prompt, temperature=0.0)
+            result = self._llm.chat_json(_get_sql_system_prompt(), prompt, temperature=0.0)
         except ValueError as exc:
             raise NL2SQLError(str(exc)) from exc
         if not isinstance(result, dict):
@@ -160,7 +145,7 @@ class NL2SQLService:
             "请用 2-4 句中文总结关键洞察。"
         )
         try:
-            return self._llm.chat_text(SUMMARY_SYSTEM_PROMPT, user_msg, temperature=0.3)
+            return self._llm.chat_text(_get_summary_system_prompt(), user_msg, temperature=0.3)
         except Exception:
             logger.exception("总结失败，使用兜底文案")
             return f"查询完成，共返回 {data['row_count']} 行结果。"
