@@ -8,16 +8,24 @@
 |---|---|
 | 前端 | React 18 + TypeScript + Vite + Ant Design + ECharts |
 | 后端 | Python 3.11 + **uv** + FastAPI + SQLAlchemy |
+| 工作流 | **LangGraph**（节点编排：提取关键词 → 生成 SQL → 验证 → 纠错 → 执行 → 总结） |
 | LLM | DeepSeek (通过 OpenAI SDK 协议，**可一键切换** GPT/Qwen) |
 | 业务数据库 | SQLite（mock 数据，可平滑迁移到 PostgreSQL/MySQL） |
 | 应用数据库 | SQLite（会话/消息历史） |
+| 向量索引 | OpenAI Embedding + 本地 numpy HNSW |
+| 全文索引 | SQLite FTS5 + BM25 |
 | 部署 | Docker Compose |
 
 ## 功能
 
 - 自然语言提问，自动生成只读 SQL
+- **LangGraph 工作流编排**：节点级进度可视化，条件分支自动纠错
 - **Schema 混合检索**：全文索引 (FTS5) + 向量索引 (Embedding) + RRF 融合，大库场景精准选表
+- **LLM 关键词扩展**：自动扩展同义词（如"销售额"→"营收"/"GMV"），提升召回率
+- **jieba 中文分词**：精准提取中文关键词，支持 12 种词性
+- **Prompt 文件化管理**：所有 Prompt 独立到 `prompts/` 目录，热更新无需重启
 - **SQL 安全校验**：禁止 DML/DDL，禁止多语句，自动加 LIMIT
+- **SQL 自动纠错**：执行失败时 LLM 自动修正，最多 2 次重试
 - 自动选择最合适的图表（KPI / 柱图 / 折线 / 饼图 / 热力图 / 相关性图 / 表格）
 - 多轮对话 + 会话历史持久化
 - 支持 LLM 的"澄清式追问"
@@ -29,24 +37,50 @@
 chatBI/
 ├── backend/                       # FastAPI 后端
 │   ├── app/
+│   │   ├── agent/                 # LangGraph 工作流（核心改造）
+│   │   │   ├── graph.py           # 工作流定义与编译
+│   │   │   ├── state.py           # ChatState TypedDict 状态管理
+│   │   │   ├── context.py         # ChatContext 运行时上下文
+│   │   │   ├── streaming.py       # SSE 流式进度适配
+│   │   │   └── nodes/             # 工作流节点
+│   │   │       ├── extract_keywords.py
+│   │   │       ├── generate_sql.py
+│   │   │       ├── execute_sql.py
+│   │   │       ├── correct_sql.py
+│   │   │       └── summarize.py
+│   │   ├── clients/               # 客户端管理器（资源生命周期）
+│   │   │   ├── llm_client_manager.py
+│   │   │   └── db_client_manager.py
+│   │   ├── repositories/          # 数据访问层（Repository 模式）
+│   │   │   ├── schema_repository.py
+│   │   │   └── cache_repository.py
 │   │   ├── middleware/            # 请求 ID、安全响应头等
 │   │   ├── api/                   # 路由：chat / conversations / meta
 │   │   ├── services/
 │   │   │   ├── llm.py             # DeepSeek 客户端
-│   │   │   ├── nl2sql.py          # NL2SQL 核心流程
-│   │   │   ├── hybrid_search.py   # Schema 混合检索（FTS5 + Embedding）
+│   │   │   ├── nl2sql.py          # NL2SQL 核心流程（兼容旧接口）
+│   │   │   ├── hybrid_search.py   # Schema 混合检索（FTS5 + Embedding + RRF）
+│   │   │   ├── keyword_expand.py  # LLM 关键词扩展
+│   │   │   ├── schema_builder.py  # 元数据知识库自动构建
 │   │   │   ├── sql_safety.py      # SQL 安全校验
+│   │   │   ├── sql_fixer.py       # SQL 纠错重试
 │   │   │   └── chart.py           # 图表推荐
 │   │   ├── schema_meta.py         # 业务表结构元数据（喂给 LLM）
+│   │   ├── prompt_loader.py       # Prompt 文件加载器
 │   │   ├── seed.py                # 生成 mock 数据
 │   │   ├── models.py              # 应用库 ORM 模型
 │   │   ├── database.py
 │   │   ├── config.py
 │   │   └── main.py
+│   ├── prompts/                   # Prompt 文件（热更新）
+│   │   ├── sql_system.prompt
+│   │   ├── summary.prompt
+│   │   ├── fix_sql.prompt
+│   │   └── extend_keywords.prompt
 │   ├── tests/                     # pytest：SQL 安全、图表、HTTP
-│   ├── pyproject.toml               # 依赖声明（uv）
-│   ├── uv.lock                      # 锁定版本（提交到 Git）
-│   ├── .python-version              # 本地默认 Python 3.11
+│   ├── pyproject.toml             # 依赖声明（uv）
+│   ├── uv.lock                    # 锁定版本（提交到 Git）
+│   ├── .python-version            # 本地默认 Python 3.11
 │   ├── Dockerfile
 │   └── .env.example
 ├── frontend/                      # React 前端
@@ -197,7 +231,24 @@ BUSINESS_DB_URL=mysql+pymysql://user:pass@host:3306/dbname
 
 **强烈建议**生产环境额外使用**只读数据库账号**，做纵深防御。
 
-## Schema 混合检索
+## 架构亮点
+
+### 1. LangGraph 工作流编排
+
+将 NL2SQL 流程拆分为 5 个独立节点，通过 `StateGraph` 编排：
+
+```
+START -> extract_keywords -> generate_sql -> execute_sql -> summarize -> END
+                              | 失败
+                              v
+                        correct_sql --(重试)--> execute_sql
+```
+
+- **节点级进度**：SSE 流式推送每个节点的 `running/success/error` 状态
+- **条件分支**：SQL 执行失败自动走 `correct_sql` 纠错节点
+- **状态可视化**：`ChatState` TypedDict 明确定义每个阶段的状态
+
+### 2. Schema 混合检索
 
 当业务库表很多时（50+ 表），把所有表结构都喂给 LLM 会超出上下文窗口，而且无关表会干扰 SQL 生成准确率。
 
@@ -208,6 +259,8 @@ BUSINESS_DB_URL=mysql+pymysql://user:pass@host:3306/dbname
 | **全文索引** | 精确关键词匹配（表名、字段名） | SQLite FTS5 + BM25 |
 | **向量索引** | 语义相似度（同义词、近义词） | OpenAI Embedding + 本地 HNSW |
 | **RRF 融合** | 综合两种排序，取长补短 | Reciprocal Rank Fusion |
+| **关键词扩展** | LLM 自动扩展同义词 | 如"销售额"→"营收"/"GMV" |
+| **jieba 分词** | 精准中文分词 | 支持名词/动词/形容词等 12 种词性 |
 
 **配置 Embedding（可选）**：
 
@@ -226,6 +279,54 @@ curl "http://localhost:8000/api/meta/search?q=用户年龄分布&top_k=3"
 ```
 
 **效果**：大 Schema 场景下，SQL 生成准确率提升 20%+。
+
+### 3. Prompt 文件化管理
+
+所有 Prompt 提取到 `backend/prompts/` 目录：
+
+```
+prompts/
+├── sql_system.prompt      # SQL 生成系统 Prompt
+├── summary.prompt         # 结果总结 Prompt
+├── fix_sql.prompt         # SQL 纠错 Prompt
+└── extend_keywords.prompt # 关键词扩展 Prompt
+```
+
+- **热更新**：修改 Prompt 文件无需重启服务
+- **版本管理**：Prompt 变更纳入 Git 版本控制
+- **A/B 测试**：可快速切换不同版本的 Prompt
+
+### 4. Repository + ClientManager 模式
+
+```
+app/
+├── clients/               # 客户端管理器（统一资源生命周期）
+│   ├── llm_client_manager.py
+│   └── db_client_manager.py
+└── repositories/          # 数据访问层（隔离底层存储）
+    ├── schema_repository.py
+    └── cache_repository.py
+```
+
+- **资源可控**：统一初始化和关闭，避免连接泄漏
+- **可测试**：Repository 接口便于 Mock 单元测试
+- **可扩展**：新增数据源只需实现对应 Repository
+
+### 5. 元数据知识库自动构建
+
+`schema_builder.py` 自动从数据源抽取 Schema：
+
+```python
+# 为指定数据源构建 Schema
+build_schema_for_source(source_id=1)
+
+# 重建混合检索索引
+rebuild_hybrid_index()
+```
+
+- 自动识别表结构、字段、外键关系
+- 支持 SQLite / PostgreSQL / MySQL
+- Schema 保存到数据源配置，支持多数据源
 
 ## 切换 LLM
 
@@ -246,6 +347,8 @@ DEEPSEEK_MODEL=qwen-plus
 
 ## 演进路线
 
+### 已完成
+
 - [x] CI（GitHub Actions）+ 核心路径单元测试（SQL 安全、图表推荐、HTTP 探针）
 - [x] Docker Compose 一键交付（Nginx 静态前端 + `/api` 反代、健康检查、`make deploy`）
 - [x] 流式响应（SSE 打字机效果）
@@ -257,6 +360,21 @@ DEEPSEEK_MODEL=qwen-plus
 - [x] 智能图表增强（热力图、相关性图、PNG 导出）
 - [x] 对话模板/收藏夹 + 用户偏好记忆
 - [x] 对话质量评分与反馈系统
+- [x] **LangGraph 工作流编排**（节点级进度、条件分支自动纠错）
+- [x] **Prompt 文件化管理**（热更新、版本控制）
+- [x] **LLM 关键词扩展**（同义词扩展提升召回率）
+- [x] **jieba 中文分词**（精准关键词提取）
+- [x] **Repository + ClientManager 模式**（资源生命周期管理）
+- [x] **元数据知识库自动构建**（从数据源自动抽取 Schema）
+
+### 规划中
+
+- [ ] 前端进度条组件（展示 LangGraph 节点级进度）
+- [ ] API 路由全面接入 LangGraph（替换旧 `nl2sql.py` 调用）
+- [ ] 向量数据库升级（Qdrant / pgvector 替代本地 numpy）
+- [ ] 指标（Metric）概念（预定义业务指标提升复杂查询准确率）
+- [ ] 多轮对话上下文优化（基于 LangGraph 的 checkpoint 机制）
+- [ ] 工作流可视化调试界面
 
 ## License
 
