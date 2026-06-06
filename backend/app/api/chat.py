@@ -8,38 +8,35 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.api.deps import create_conversation, get_conversation_or_404, get_optional_user_id
+from app.config import get_settings
 from app.database import get_app_db
-from app.models import Conversation, Message
+from app.models import Message
 from app.schemas import ChatRequest, ChatResponse
-from app.services.auth import decode_access_token, get_user_by_id, log_audit
+from app.services.auth import log_audit
 from app.services.nl2sql import NL2SQLError, get_nl2sql_service
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+settings = get_settings()
 
 
-def _get_user_id(request: Request) -> int | None:
-    """从请求头提取用户 ID。"""
-    auth = request.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
-        payload = decode_access_token(auth[7:])
-        if payload:
-            return int(payload["sub"])
-    return None
+def _generic_error_message(exc: Exception) -> str:
+    if settings.is_production:
+        return "服务出现异常，请稍后重试"
+    return str(exc)
 
 
 @router.post("", response_model=ChatResponse)
 def chat(payload: ChatRequest, request: Request, db: Session = Depends(get_app_db)) -> ChatResponse:
+    user_id = get_optional_user_id(request)
+    ip = request.client.host if request.client else None
+
     if payload.conversation_id:
-        conversation = db.get(Conversation, payload.conversation_id)
-        if not conversation:
-            raise HTTPException(status_code=404, detail="会话不存在")
+        conversation = get_conversation_or_404(db, payload.conversation_id, user_id)
     else:
         title = payload.question[:30] + ("…" if len(payload.question) > 30 else "")
-        conversation = Conversation(title=title)
-        db.add(conversation)
-        db.flush()
+        conversation = create_conversation(db, title, user_id)
 
     user_msg = Message(
         conversation_id=conversation.id,
@@ -51,9 +48,6 @@ def chat(payload: ChatRequest, request: Request, db: Session = Depends(get_app_d
 
     history_payload = [h.model_dump() for h in payload.history]
     service = get_nl2sql_service()
-
-    user_id = _get_user_id(request)
-    ip = request.client.host if request.client else None
 
     try:
         result = service.ask(payload.question, history=history_payload)
@@ -81,7 +75,7 @@ def chat(payload: ChatRequest, request: Request, db: Session = Depends(get_app_d
             conversation_id=conversation.id,
             role="assistant",
             content="抱歉，服务出现异常。",
-            error=str(exc),
+            error=_generic_error_message(exc),
         )
         db.add(err_msg)
         db.commit()
@@ -89,7 +83,7 @@ def chat(payload: ChatRequest, request: Request, db: Session = Depends(get_app_d
             type="error",
             conversation_id=conversation.id,
             message_id=err_msg.id,
-            error=str(exc),
+            error=_generic_error_message(exc),
         )
 
     if result["type"] == "clarification":
@@ -134,23 +128,28 @@ def chat(payload: ChatRequest, request: Request, db: Session = Depends(get_app_d
 
 
 @router.post("/stream")
-def chat_stream(payload: ChatRequest, db: Session = Depends(get_app_db)) -> StreamingResponse:
+def chat_stream(
+    payload: ChatRequest,
+    request: Request,
+    db: Session = Depends(get_app_db),
+) -> StreamingResponse:
     """SSE 流式对话：逐阶段推送 thinking / sql / data / chart / summary。"""
+    user_id = get_optional_user_id(request)
+    ip = request.client.host if request.client else None
 
     def event(data: dict) -> str:
         return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
     def generate():
         if payload.conversation_id:
-            conversation = db.get(Conversation, payload.conversation_id)
-            if not conversation:
-                yield event({"type": "error", "error": "会话不存在"})
+            try:
+                conversation = get_conversation_or_404(db, payload.conversation_id, user_id)
+            except HTTPException as exc:
+                yield event({"type": "error", "error": exc.detail})
                 return
         else:
             title = payload.question[:30] + ("…" if len(payload.question) > 30 else "")
-            conversation = Conversation(title=title)
-            db.add(conversation)
-            db.flush()
+            conversation = create_conversation(db, title, user_id)
 
         user_msg = Message(
             conversation_id=conversation.id,
@@ -169,6 +168,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_app_db)) -> Stre
             sql_result = service.generate_sql(payload.question, history=history_payload)
         except NL2SQLError as exc:
             logger.warning("NL2SQL 生成 SQL 失败: %s", exc)
+            log_audit(user_id, "chat_error", resource=f"conv:{conversation.id}", detail=str(exc)[:200], ip=ip)
             err_msg = Message(
                 conversation_id=conversation.id,
                 role="assistant",
@@ -198,12 +198,12 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_app_db)) -> Stre
 
         try:
             data = service.execute_sql(sql, question=payload.question)
-            # 如果 SQL 被修正，更新 sql 变量用于后续展示
             fixed_sql = data.pop("fixed_sql", None)
             if fixed_sql:
                 sql = fixed_sql
         except NL2SQLError as exc:
             logger.warning("SQL 执行失败: %s", exc)
+            log_audit(user_id, "chat_error", resource=f"conv:{conversation.id}", detail=str(exc)[:200], ip=ip)
             err_msg = Message(
                 conversation_id=conversation.id,
                 role="assistant",
@@ -227,7 +227,6 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_app_db)) -> Stre
         else:
             summary = "未查询到匹配数据。"
 
-        # 打字机效果：逐字推送 summary
         for i in range(1, len(summary) + 1):
             chunk = summary[:i]
             yield event({"type": "summary_chunk", "conversation_id": conversation.id, "chunk": chunk, "done": i == len(summary)})
@@ -244,6 +243,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_app_db)) -> Stre
         db.add(assistant_msg)
         db.commit()
 
+        log_audit(user_id, "chat_stream", resource=f"conv:{conversation.id}", detail=f"sql={sql[:100]}", ip=ip)
         yield event({"type": "done", "conversation_id": conversation.id, "message_id": assistant_msg.id})
 
     return StreamingResponse(

@@ -22,12 +22,25 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-chat"
 
     business_db_url: str = "sqlite:///./data/business.db"
+    business_db_readonly: bool = Field(default=False)
     app_db_url: str = "sqlite:///./data/app.db"
 
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
 
     sql_row_limit: int = Field(default=1000, ge=1, le=50_000)
     llm_timeout_seconds: int = Field(default=60, ge=5, le=600)
+    sql_query_timeout_seconds: int = Field(default=30, ge=1, le=300)
+
+    jwt_secret: str = Field(default="", description="JWT 签名密钥，生产环境必填")
+    admin_password: str = Field(default="", description="默认管理员密码，生产环境必填")
+    allow_public_register: bool = Field(default=True)
+    rate_limit_requests: int = Field(default=30, ge=1, le=1000)
+    rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
+    cache_ttl_seconds: int = Field(default=300, ge=0, le=86400)
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.lower() == "production"
 
     @field_validator("log_level")
     @classmethod

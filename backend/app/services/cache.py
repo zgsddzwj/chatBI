@@ -13,11 +13,14 @@ from typing import Any
 
 from sqlalchemy import text
 
+from app.config import get_settings
 from app.database import app_engine
 
 logger = logging.getLogger(__name__)
 
-CACHE_TTL_SECONDS = 300  # 默认缓存 5 分钟
+
+def _cache_ttl() -> int:
+    return get_settings().cache_ttl_seconds
 
 
 def _init_cache_table() -> None:
@@ -75,7 +78,9 @@ def get_cached(sql: str) -> dict[str, Any] | None:
         return None
 
 
-def set_cache(sql: str, result: dict[str, Any], chart: dict[str, Any] | None = None, ttl: int = CACHE_TTL_SECONDS) -> None:
+def set_cache(sql: str, result: dict[str, Any], chart: dict[str, Any] | None = None, ttl: int | None = None) -> None:
+    if ttl is None:
+        ttl = _cache_ttl()
     """缓存查询结果。"""
     _init_cache_table()
     key = _make_key(sql)

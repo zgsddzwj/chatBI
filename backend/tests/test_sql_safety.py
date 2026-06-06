@@ -48,3 +48,24 @@ def test_ensure_limit_appends() -> None:
 def test_ensure_limit_preserves_existing() -> None:
     sql = "SELECT 1 LIMIT 5"
     assert ensure_limit(sql, 999) == sql
+
+
+def test_validate_allows_union_select() -> None:
+    sql = "SELECT a FROM t1 UNION SELECT b FROM t2"
+    out = validate_sql(sql)
+    assert "UNION" in out.upper()
+
+
+def test_validate_rejects_dangerous_in_subquery() -> None:
+    with pytest.raises(UnsafeSQLError, match="DELETE"):
+        validate_sql("SELECT * FROM (DELETE FROM users) AS x")
+
+
+def test_validate_strips_comment_injection() -> None:
+    out = validate_sql("SELECT 1 /* DROP TABLE users */ AS n")
+    assert "DROP" not in out.upper() or "SELECT" in out.upper()
+
+
+def test_validate_rejects_drop_in_select_list() -> None:
+    with pytest.raises(UnsafeSQLError, match="单条"):
+        validate_sql("SELECT 1; DROP TABLE users")

@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from app.config import get_settings
 from app.schemas import LoginRequest, LoginResponse, UserCreateRequest, UserOut, AuditLogOut
 from app.services.auth import (
     authenticate_user,
@@ -55,6 +56,9 @@ def login(payload: LoginRequest, request: Request) -> LoginResponse:
 @router.post("/register", response_model=UserOut)
 def register(payload: UserCreateRequest, request: Request) -> UserOut:
     """用户注册（默认角色 analyst）。"""
+    settings = get_settings()
+    if not settings.allow_public_register:
+        raise HTTPException(status_code=403, detail="公开注册已关闭")
     try:
         user = create_user(
             username=payload.username,

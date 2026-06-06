@@ -6,27 +6,77 @@
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
+import json
 import logging
 import secrets
 from datetime import datetime, timedelta
 from typing import Any
+
+import bcrypt
 
 from app.config import get_settings
 from app.database import app_engine
 
 logger = logging.getLogger(__name__)
 
-# 简单的 secret key 用于 JWT（生产环境应使用更安全的密钥）
-_settings = get_settings()
-_SECRET = hashlib.sha256(
-    (_settings.deepseek_api_key or "chatbi-default-secret").encode()
-).hexdigest()
+_LEGACY_SALT: str | None = None
+
+
+def _get_jwt_secret() -> str:
+    settings = get_settings()
+    if settings.jwt_secret:
+        return settings.jwt_secret
+    if settings.is_production:
+        raise RuntimeError("生产环境必须设置 JWT_SECRET")
+    return "chatbi-dev-secret-change-me"
+
+
+def _legacy_salt() -> str:
+    global _LEGACY_SALT
+    if _LEGACY_SALT is None:
+        settings = get_settings()
+        _LEGACY_SALT = hashlib.sha256(
+            (settings.deepseek_api_key or "chatbi-default-secret").encode()
+        ).hexdigest()[:32]
+    return _LEGACY_SALT
+
+
+def _hash_password_legacy(password: str) -> str:
+    return hmac.new(_legacy_salt().encode(), password.encode(), hashlib.sha256).hexdigest()
+
+
+def _hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def _is_bcrypt_hash(password_hash: str) -> bool:
+    return password_hash.startswith("$2")
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    if _is_bcrypt_hash(password_hash):
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    return secrets.compare_digest(_hash_password_legacy(password), password_hash)
+
+
+def _upgrade_password_hash(user_id: int, password: str) -> None:
+    from sqlalchemy import text
+
+    new_hash = _hash_password(password)
+    with app_engine.begin() as conn:
+        conn.execute(
+            text("UPDATE users SET password_hash = :hash WHERE id = :id"),
+            {"hash": new_hash, "id": user_id},
+        )
 
 
 def _init_user_table() -> None:
     from sqlalchemy import text
+
+    settings = get_settings()
     with app_engine.begin() as conn:
         conn.execute(
             text("""
@@ -54,30 +104,32 @@ def _init_user_table() -> None:
                 )
             """)
         )
-        # 创建默认管理员账号（密码: admin123）
-        default_hash = _hash_password("admin123")
-        conn.execute(
-            text("""
-                INSERT OR IGNORE INTO users (id, username, password_hash, display_name, role)
-                VALUES (1, 'admin', :hash, '管理员', 'admin')
-            """),
-            {"hash": default_hash},
-        )
 
+        existing = conn.execute(
+            text("SELECT id FROM users WHERE username = 'admin'")
+        ).fetchone()
 
-def _hash_password(password: str) -> str:
-    """使用 HMAC-SHA256 哈希密码（简单实现，生产环境建议用 bcrypt）。"""
-    salt = _SECRET[:32]
-    return hmac.new(salt.encode(), password.encode(), hashlib.sha256).hexdigest()
-
-
-def verify_password(password: str, password_hash: str) -> bool:
-    return secrets.compare_digest(_hash_password(password), password_hash)
+        if existing is None:
+            if settings.is_production and not settings.admin_password:
+                logger.warning("生产环境未设置 ADMIN_PASSWORD，跳过默认管理员创建")
+                return
+            admin_password = settings.admin_password or "admin123"
+            default_hash = _hash_password(admin_password)
+            conn.execute(
+                text("""
+                    INSERT INTO users (id, username, password_hash, display_name, role)
+                    VALUES (1, 'admin', :hash, '管理员', 'admin')
+                """),
+                {"hash": default_hash},
+            )
+            if not settings.admin_password:
+                logger.warning("已创建默认管理员 admin / admin123，请在生产环境修改密码")
 
 
 def create_user(username: str, password: str, display_name: str | None = None, role: str = "analyst") -> dict[str, Any]:
     """创建新用户。"""
     from sqlalchemy import text
+
     _init_user_table()
     password_hash = _hash_password(password)
     with app_engine.begin() as conn:
@@ -108,6 +160,7 @@ def create_user(username: str, password: str, display_name: str | None = None, r
 def authenticate_user(username: str, password: str) -> dict[str, Any] | None:
     """验证用户密码。"""
     from sqlalchemy import text
+
     _init_user_table()
     with app_engine.begin() as conn:
         row = conn.execute(
@@ -118,6 +171,8 @@ def authenticate_user(username: str, password: str) -> dict[str, Any] | None:
         return None
     if not verify_password(password, row["password_hash"]):
         return None
+    if not _is_bcrypt_hash(row["password_hash"]):
+        _upgrade_password_hash(row["id"], password)
     return {
         "id": row["id"],
         "username": row["username"],
@@ -129,6 +184,7 @@ def authenticate_user(username: str, password: str) -> dict[str, Any] | None:
 def get_user_by_id(user_id: int) -> dict[str, Any] | None:
     """根据 ID 获取用户信息。"""
     from sqlalchemy import text
+
     _init_user_table()
     with app_engine.begin() as conn:
         row = conn.execute(
@@ -146,10 +202,8 @@ def get_user_by_id(user_id: int) -> dict[str, Any] | None:
 
 
 def create_access_token(user_id: int, expires_minutes: int = 480) -> str:
-    """创建 JWT Token（简化版，使用 HMAC）。"""
-    import base64
-    import json
-
+    """创建 JWT Token。"""
+    secret = _get_jwt_secret()
     header = base64.urlsafe_b64encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode()).rstrip(b"=")
     now = datetime.utcnow()
     payload = base64.urlsafe_b64encode(json.dumps({
@@ -158,23 +212,21 @@ def create_access_token(user_id: int, expires_minutes: int = 480) -> str:
         "exp": (now + timedelta(minutes=expires_minutes)).timestamp(),
     }).encode()).rstrip(b"=")
     signature = base64.urlsafe_b64encode(
-        hmac.new(_SECRET.encode(), f"{header.decode()}.{payload.decode()}".encode(), hashlib.sha256).digest()
+        hmac.new(secret.encode(), f"{header.decode()}.{payload.decode()}".encode(), hashlib.sha256).digest()
     ).rstrip(b"=")
     return f"{header.decode()}.{payload.decode()}.{signature.decode()}"
 
 
 def decode_access_token(token: str) -> dict[str, Any] | None:
     """解码并验证 JWT Token。"""
-    import base64
-    import json
-
+    secret = _get_jwt_secret()
     try:
         parts = token.split(".")
         if len(parts) != 3:
             return None
         header, payload, signature = parts
         expected_sig = base64.urlsafe_b64encode(
-            hmac.new(_SECRET.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest()
+            hmac.new(secret.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest()
         ).rstrip(b"=")
         if not secrets.compare_digest(signature.encode(), expected_sig):
             return None
@@ -195,6 +247,7 @@ def require_role(user: dict[str, Any], allowed_roles: set[str]) -> None:
 def log_audit(user_id: int | None, action: str, resource: str | None = None, detail: str | None = None, ip: str | None = None) -> None:
     """记录审计日志。"""
     from sqlalchemy import text
+
     _init_user_table()
     with app_engine.begin() as conn:
         conn.execute(
@@ -215,6 +268,7 @@ def log_audit(user_id: int | None, action: str, resource: str | None = None, det
 def list_audit_logs(limit: int = 100) -> list[dict[str, Any]]:
     """列出审计日志。"""
     from sqlalchemy import text
+
     _init_user_table()
     with app_engine.begin() as conn:
         rows = conn.execute(

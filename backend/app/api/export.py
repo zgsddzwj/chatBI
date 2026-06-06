@@ -5,9 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_conversation_or_404, get_optional_user_id
 from app.database import get_app_db
-from app.models import Conversation, Message
-from app.services.auth import decode_access_token
 from app.services.export import (
     conversation_to_json,
     conversation_to_markdown,
@@ -18,21 +17,15 @@ from app.services.export import (
 router = APIRouter(prefix="/api/export", tags=["export"])
 
 
-def _get_user_id(request: Request) -> int | None:
-    auth = request.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
-        payload = decode_access_token(auth[7:])
-        if payload:
-            return int(payload["sub"])
-    return None
-
-
 @router.get("/conversation/{conversation_id}/markdown")
-def export_markdown(conversation_id: int, db: Session = Depends(get_app_db)) -> PlainTextResponse:
+def export_markdown(
+    conversation_id: int,
+    request: Request,
+    db: Session = Depends(get_app_db),
+) -> PlainTextResponse:
     """导出对话为 Markdown。"""
-    conv = db.get(Conversation, conversation_id)
-    if not conv:
-        raise HTTPException(status_code=404, detail="会话不存在")
+    user_id = get_optional_user_id(request)
+    conv = get_conversation_or_404(db, conversation_id, user_id)
 
     messages = [
         {
@@ -56,11 +49,14 @@ def export_markdown(conversation_id: int, db: Session = Depends(get_app_db)) -> 
 
 
 @router.get("/conversation/{conversation_id}/json")
-def export_json(conversation_id: int, db: Session = Depends(get_app_db)) -> PlainTextResponse:
+def export_json(
+    conversation_id: int,
+    request: Request,
+    db: Session = Depends(get_app_db),
+) -> PlainTextResponse:
     """导出对话为 JSON。"""
-    conv = db.get(Conversation, conversation_id)
-    if not conv:
-        raise HTTPException(status_code=404, detail="会话不存在")
+    user_id = get_optional_user_id(request)
+    conv = get_conversation_or_404(db, conversation_id, user_id)
 
     messages = [
         {
@@ -84,15 +80,17 @@ def export_json(conversation_id: int, db: Session = Depends(get_app_db)) -> Plai
 
 
 @router.post("/conversation/{conversation_id}/share")
-def create_share(conversation_id: int, request: Request, db: Session = Depends(get_app_db)) -> dict:
+def create_share(
+    conversation_id: int,
+    request: Request,
+    db: Session = Depends(get_app_db),
+) -> dict:
     """创建分享链接。"""
-    user_id = _get_user_id(request)
+    user_id = get_optional_user_id(request)
     if not user_id:
         raise HTTPException(status_code=401, detail="请先登录")
 
-    conv = db.get(Conversation, conversation_id)
-    if not conv:
-        raise HTTPException(status_code=404, detail="会话不存在")
+    conv = get_conversation_or_404(db, conversation_id, user_id)
 
     messages = [
         {

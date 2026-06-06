@@ -50,9 +50,14 @@ export const sendChatStream = (
   onError?: (err: string) => void,
 ): (() => void) => {
   const ctrl = new AbortController();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = getToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
   fetch("/api/chat/stream", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(payload),
     signal: ctrl.signal,
   })

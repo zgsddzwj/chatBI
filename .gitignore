@@ -11,6 +11,8 @@ venv/
 env/
 ENV/
 .pytest_cache/
+.coverage
+backend/tests/_test_data/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/

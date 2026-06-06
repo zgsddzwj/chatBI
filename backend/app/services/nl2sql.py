@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from typing import Any
 
 from sqlalchemy import text
@@ -107,17 +108,27 @@ class NL2SQLService:
         last_error: str | None = None
         current_sql = sql
 
+        timeout = self._settings.sql_query_timeout_seconds
+
+        def _run_query() -> dict[str, Any]:
+            with business_engine.connect() as conn:
+                cursor = conn.execute(text(current_sql))
+                columns = list(cursor.keys())
+                rows = [list(r) for r in cursor.fetchall()]
+            return {"columns": columns, "rows": rows, "row_count": len(rows)}
+
         for attempt in range(max_retries + 1):
             try:
-                with business_engine.connect() as conn:
-                    cursor = conn.execute(text(current_sql))
-                    columns = list(cursor.keys())
-                    rows = [list(r) for r in cursor.fetchall()]
-                result = {"columns": columns, "rows": rows, "row_count": len(rows)}
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(_run_query)
+                    result = future.result(timeout=timeout)
                 # 如果经过修正，返回修正后的 SQL
                 if attempt > 0:
                     result["fixed_sql"] = current_sql
                 return result
+            except FuturesTimeoutError:
+                last_error = f"查询超时（>{timeout}s）"
+                break
             except Exception as exc:  # noqa: BLE001
                 last_error = str(exc)
                 logger.warning("SQL 执行失败 (attempt %d/%d): %s", attempt + 1, max_retries + 1, last_error[:200])
