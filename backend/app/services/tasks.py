@@ -19,7 +19,7 @@ from sqlalchemy import text
 from app.database import app_engine, business_engine
 from app.services.cache import get_cached, set_cache
 from app.services.chart import recommend_chart
-from app.services.sql_safety import UnsafeSQLError, ensure_limit, validate_sql
+from app.services.sql_safety import ensure_limit, validate_sql
 
 logger = logging.getLogger(__name__)
 

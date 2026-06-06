@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.config import get_settings
-from app.schemas import LoginRequest, LoginResponse, UserCreateRequest, UserOut, AuditLogOut
+from app.schemas import AuditLogOut, LoginRequest, LoginResponse, UserCreateRequest, UserOut
 from app.services.auth import (
     authenticate_user,
     create_access_token,

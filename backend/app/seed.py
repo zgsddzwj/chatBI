@@ -12,7 +12,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from app.database import business_engine, app_engine, AppBase
+from app.database import AppBase, app_engine, business_engine
 
 random.seed(42)
 

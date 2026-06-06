@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -14,9 +13,8 @@ client = TestClient(app)
 
 
 def test_register_and_login() -> None:
-    username = f"alice_{pytest.current_test_name() if hasattr(pytest, 'current_test_name') else 't1'}"
-    # 使用时间戳避免重复
     import time
+
     username = f"alice_{int(time.time() * 1000)}"
     r = client.post("/api/auth/register", json={"username": username, "password": "secret12"})
     assert r.status_code == 200
@@ -44,8 +42,14 @@ def test_conversation_isolation(mock_get_service, _mock_audit) -> None:
         r = client.post("/api/auth/register", json={"username": name, "password": "password12"})
         assert r.status_code == 200
 
-    login_a = client.post("/api/auth/login", json={"username": f"user_a_{suffix}", "password": "password12"}).json()
-    login_b = client.post("/api/auth/login", json={"username": f"user_b_{suffix}", "password": "password12"}).json()
+    login_a = client.post(
+        "/api/auth/login",
+        json={"username": f"user_a_{suffix}", "password": "password12"},
+    ).json()
+    login_b = client.post(
+        "/api/auth/login",
+        json={"username": f"user_b_{suffix}", "password": "password12"},
+    ).json()
     token_a = login_a["access_token"]
     token_b = login_b["access_token"]
 

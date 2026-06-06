@@ -2,20 +2,20 @@
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any
 
 from sqlalchemy import text
 
 from app.config import get_settings
 from app.database import business_engine
-from app.schema_meta import render_schema_prompt
-from app.services.schema_search import render_schema_prompt_filtered
 from app.services.cache import get_cached, set_cache
 from app.services.chart import recommend_chart
 from app.services.llm import get_llm
-from app.services.sql_safety import UnsafeSQLError, ensure_limit, validate_sql
+from app.services.schema_search import render_schema_prompt_filtered
 from app.services.sql_fixer import try_fix_sql
+from app.services.sql_safety import UnsafeSQLError, ensure_limit, validate_sql
 
 logger = logging.getLogger(__name__)
 

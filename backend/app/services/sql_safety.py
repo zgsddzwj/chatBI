@@ -9,7 +9,6 @@ import re
 
 import sqlparse
 from sqlparse.sql import Statement
-from sqlparse.tokens import DML, Keyword
 
 DANGEROUS_KEYWORDS = {
     "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE",

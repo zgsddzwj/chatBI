@@ -1,8 +1,8 @@
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
-from sqlalchemy import create_engine, Engine, event
-from sqlalchemy.orm import sessionmaker, Session, declarative_base
+from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.config import get_settings

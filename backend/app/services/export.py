@@ -60,14 +60,14 @@ def conversation_to_markdown(messages: list[dict[str, Any]], title: str = "对�
         error = msg.get("error")
 
         if role == "user":
-            lines.append(f"## 👤 用户")
+            lines.append("## 👤 用户")
             lines.append(content)
         elif role == "assistant":
             if error:
-                lines.append(f"## 🤖 助手 (出错)")
+                lines.append("## 🤖 助手 (出错)")
                 lines.append(f"**错误:** {error}")
             else:
-                lines.append(f"## 🤖 助手")
+                lines.append("## 🤖 助手")
                 if summary:
                     lines.append(summary)
                 elif content:

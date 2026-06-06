@@ -1,8 +1,8 @@
 """会话管理接口。"""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import desc, or_
+from fastapi import APIRouter, Depends, Request
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_conversation_or_404, get_optional_user_id

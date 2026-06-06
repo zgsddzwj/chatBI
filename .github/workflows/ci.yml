@@ -19,8 +19,17 @@ jobs:
           version: "0.9.26"
       - name: Sync deps (incl. dev)
         run: uv sync --frozen --group dev
+      - name: Ruff check
+        run: uv run ruff check .
+      - name: Ruff format
+        run: uv run ruff format --check .
       - name: Pytest
         run: uv run pytest -q
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/.coverage
 
   frontend:
     runs-on: ubuntu-latest
@@ -35,6 +44,8 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npm run lint
+      - run: npm run test
       - run: npm run build
 
   docker-images:
@@ -47,3 +58,10 @@ jobs:
           sed -i 's/^DEEPSEEK_API_KEY=.*/DEEPSEEK_API_KEY=sk-ci-dummy-not-used-at-build/' .env
       - name: Build images
         run: docker compose build
+      - name: Smoke test
+        run: |
+          docker compose up -d
+          sleep 15
+          curl -fsS http://127.0.0.1:8000/health
+          curl -fsS http://127.0.0.1:8000/ready || true
+          docker compose down

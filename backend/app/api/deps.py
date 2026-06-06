@@ -1,8 +1,6 @@
 """API 公共依赖：认证与会话权限。"""
 from __future__ import annotations
 
-from typing import Any
-
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 

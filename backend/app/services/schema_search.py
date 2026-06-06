@@ -16,7 +16,6 @@ from typing import Any
 
 from app.schema_meta import BUSINESS_SCHEMA
 
-
 # 停用词
 _STOP_WORDS = {
     "的", "是", "在", "有", "和", "与", "或", "了", "吗", "什么", "多少",

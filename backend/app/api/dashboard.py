@@ -3,10 +3,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from app.schemas import CardCreate, DashboardCreate, DashboardOut
-from app.services.auth import decode_access_token, get_user_by_id
+from app.services.auth import decode_access_token
 from app.services.dashboard import (
     add_card_to_dashboard,
     create_card,

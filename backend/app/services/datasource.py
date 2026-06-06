@@ -9,7 +9,7 @@ import json
 import logging
 from typing import Any
 
-from sqlalchemy import create_engine, text, Engine
+from sqlalchemy import Engine, create_engine, text
 
 from app.database import app_engine
 
