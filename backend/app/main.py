@@ -31,12 +31,15 @@ logger = logging.getLogger(__name__)
 async def lifespan(_app: FastAPI):
     from app import models  # noqa: F401
     from app.services.cache import clear_expired
+    from app.services.hybrid_search import warmup
 
     AppBase.metadata.create_all(bind=app_engine)
     run_migrations()
     cleared = clear_expired()
     if cleared:
         logger.info("启动时清理过期缓存 %d 条", cleared)
+    # 预热混合检索索引
+    warmup()
     yield
 
 

@@ -1,7 +1,7 @@
 """Schema 智能检索单元测试。"""
 from __future__ import annotations
 
-from app.services.schema_search import search_relevant_tables, render_schema_prompt_filtered
+from app.services.schema_search import render_schema_prompt_filtered, search_relevant_tables
 
 
 def test_search_users_question() -> None:

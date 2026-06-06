@@ -5,6 +5,7 @@ from fastapi import APIRouter
 
 from app.schema_meta import BUSINESS_SCHEMA
 from app.schemas import SampleQuestions, SchemaInfo
+from app.services.hybrid_search import hybrid_search
 
 router = APIRouter(prefix="/api/meta", tags=["meta"])
 
@@ -29,3 +30,21 @@ def get_schema() -> dict:
 @router.get("/samples", response_model=SampleQuestions)
 def get_samples() -> dict:
     return {"questions": SAMPLE_QUESTIONS}
+
+
+@router.get("/search")
+def search_schema(q: str, top_k: int = 5) -> dict:
+    """混合检索调试接口：测试全文+向量检索效果。"""
+    results = hybrid_search(q, top_k=top_k)
+    return {
+        "query": q,
+        "results": [
+            {
+                "id": r["id"],
+                "score": r["score"],
+                "type": "hint" if r.get("is_hint") else "table",
+                "table": r["table_data"]["name"] if r["table_data"] else None,
+            }
+            for r in results
+        ],
+    }

@@ -17,6 +17,8 @@ dependencies = [
     "prometheus-client>=0.21,<1",
     "structlog>=24.4,<26",
     "psycopg2-binary>=2.9,<3",
+    "numpy>=2.4.4",
+    "scikit-learn>=1.9.0",
 ]
 
 [tool.uv]

@@ -13,7 +13,7 @@ from app.database import business_engine
 from app.services.cache import get_cached, set_cache
 from app.services.chart import recommend_chart
 from app.services.llm import get_llm
-from app.services.schema_search import render_schema_prompt_filtered
+from app.services.hybrid_search import render_schema_prompt_hybrid
 from app.services.sql_fixer import try_fix_sql
 from app.services.sql_safety import UnsafeSQLError, ensure_limit, validate_sql
 
@@ -62,8 +62,8 @@ class NL2SQLService:
     def _build_user_prompt(self, question: str, history: list[dict[str, str]] | None) -> str:
         parts: list[str] = []
         parts.append("# 数据库 Schema\n")
-        # 使用智能检索过滤相关表
-        parts.append(render_schema_prompt_filtered(question, top_k=3))
+        # 使用混合检索（全文 + 向量）过滤相关表
+        parts.append(render_schema_prompt_hybrid(question, top_k=3))
         if history:
             parts.append("\n# 最近的对话（用于理解上下文）")
             for h in history[-6:]:
@@ -138,7 +138,7 @@ class NL2SQLService:
                     break
 
                 # 尝试纠错
-                schema_prompt = render_schema_prompt_filtered(question, top_k=3)
+                schema_prompt = render_schema_prompt_hybrid(question, top_k=3)
                 fix_result = try_fix_sql(question, current_sql, last_error, schema_prompt, self._settings.sql_row_limit)
                 if fix_result and not fix_result.get("needs_clarification"):
                     current_sql = fix_result["sql"]
