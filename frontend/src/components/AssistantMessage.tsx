@@ -6,6 +6,7 @@ import {
   CodeOutlined,
   CopyOutlined,
   StarOutlined,
+  BookOutlined,
 } from "@ant-design/icons";
 import type { ChartSpec, QueryResult } from "../types";
 import { ChartView } from "./ChartView";
@@ -35,6 +36,7 @@ interface Props {
   clarification?: string | null;
   streaming?: boolean;
   onPin?: () => void;
+  onBookmark?: () => void;
 }
 
 const renderTable = (data: QueryResult) => {
@@ -99,6 +101,7 @@ export const AssistantMessage: React.FC<Props> = ({
   clarification,
   streaming,
   onPin,
+  onBookmark,
 }) => {
   const [tab, setTab] = useState<string>(() => (chart?.type === "table" ? "table" : "chart"));
   const safeData = normalizeQueryResult(data);
@@ -136,11 +139,18 @@ export const AssistantMessage: React.FC<Props> = ({
       {summary && (
         <div className="assistant-summary" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
           <span style={{ flex: 1 }}>{summary}</span>
-          {onPin && chart && chart.type !== "empty" && chart.type !== "table" && (
-            <Tooltip title="收藏到仪表盘">
-              <Button size="small" icon={<StarOutlined />} onClick={onPin} />
-            </Tooltip>
-          )}
+          <div style={{ display: "flex", gap: 4 }}>
+            {onBookmark && (
+              <Tooltip title="收藏查询模板">
+                <Button size="small" icon={<BookOutlined />} onClick={onBookmark} />
+              </Tooltip>
+            )}
+            {onPin && chart && chart.type !== "empty" && chart.type !== "table" && (
+              <Tooltip title="收藏到仪表盘">
+                <Button size="small" icon={<StarOutlined />} onClick={onPin} />
+              </Tooltip>
+            )}
+          </div>
           {streaming && <span className="typing-cursor" />}
         </div>
       )}

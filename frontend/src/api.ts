@@ -3,6 +3,7 @@ import type {
   ChatAnswer,
   Conversation,
   ConversationDetail,
+  StreamEvent,
 } from "./types";
 import { getToken } from "./auth";
 
@@ -29,20 +30,6 @@ export const sendChat = async (payload: ChatPayload): Promise<ChatAnswer> => {
   const { data } = await api.post<ChatAnswer>("/api/chat", payload);
   return data;
 };
-
-export interface StreamEvent {
-  type: string;
-  conversation_id?: number;
-  message_id?: number;
-  sql?: string;
-  explanation?: string;
-  data?: any;
-  chart?: any;
-  chunk?: string;
-  done?: boolean;
-  clarification?: string;
-  error?: string;
-}
 
 export const sendChatStream = (
   payload: ChatPayload,

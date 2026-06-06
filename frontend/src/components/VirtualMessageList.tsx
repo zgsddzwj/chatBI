@@ -19,11 +19,12 @@ interface MessageItem {
 interface Props {
   messages: MessageItem[];
   onPin?: (message: MessageItem) => void;
+  onBookmark?: (message: MessageItem) => void;
 }
 
 const ITEM_HEIGHT_ESTIMATE = 120;
 
-export const VirtualMessageList: React.FC<Props> = ({ messages, onPin }) => {
+export const VirtualMessageList: React.FC<Props> = ({ messages, onPin, onBookmark }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { virtualItems, totalHeight } = useVirtualList(
@@ -59,6 +60,7 @@ export const VirtualMessageList: React.FC<Props> = ({ messages, onPin }) => {
                       ? () => onPin(m)
                       : undefined
                   }
+                  onBookmark={onBookmark ? () => onBookmark(m) : undefined}
                 />
               )}
             </div>
