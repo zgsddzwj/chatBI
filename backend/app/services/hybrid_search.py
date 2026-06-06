@@ -339,34 +339,44 @@ def _reciprocal_rank_fusion(
     return sorted_results
 
 
-def hybrid_search(question: str, top_k: int = 5) -> list[dict[str, Any]]:
+def hybrid_search(question: str, top_k: int = 5, expand_keywords: bool = True) -> list[dict[str, Any]]:
     """混合检索：返回最相关的 Schema 文档。
-    
+
     流程：
-    1. 向量化用户问题
-    2. 向量索引搜索 top_k
-    3. 全文索引搜索 top_k
-    4. RRF 融合结果
-    5. 返回文档列表
+    1. (可选) LLM 扩展关键词
+    2. 向量化用户问题
+    3. 向量索引搜索 top_k
+    4. 全文索引搜索 top_k(使用扩展后的关键词)
+    5. RRF 融合结果
+    6. 返回文档列表
     """
     # 获取索引
     vector_idx = _get_vector_index()
     fts_idx = _get_fts_index()
-    
-    # 1. 向量搜索
+
+    # 1. 关键词扩展
+    search_query = question
+    if expand_keywords:
+        from app.services.keyword_expand import expand_keywords as _expand
+        expanded = _expand(question)
+        # 用扩展关键词拼接成更丰富的搜索查询
+        search_query = " ".join(expanded)
+        logger.debug("关键词扩展: %s -> %s", question, expanded)
+
+    # 2. 向量搜索(使用原始问题，保持语义一致性)
     query_vector = _get_embedding(question)
     vector_results = vector_idx.search(query_vector, top_k=top_k * 2)
     logger.debug("向量搜索结果: %s", vector_results)
-    
-    # 2. 全文搜索
-    fts_results = fts_idx.search(question, top_k=top_k * 2)
+
+    # 3. 全文搜索(使用扩展后的关键词，提升召回率)
+    fts_results = fts_idx.search(search_query, top_k=top_k * 2)
     logger.debug("全文搜索结果: %s", fts_results)
-    
-    # 3. RRF 融合
+
+    # 4. RRF 融合
     fused = _reciprocal_rank_fusion(vector_results, fts_results)
     logger.debug("RRF 融合结果: %s", fused[:top_k])
-    
-    # 4. 组装结果
+
+    # 5. 组装结果
     results = []
     for doc_id, score in fused[:top_k]:
         doc = vector_idx.doc_map.get(doc_id)
@@ -377,7 +387,7 @@ def hybrid_search(question: str, top_k: int = 5) -> list[dict[str, Any]]:
                 "table_data": doc.get("table_data"),
                 "is_hint": doc.get("is_hint", False),
             })
-    
+
     return results
 
 
