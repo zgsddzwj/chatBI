@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import jieba.analyse
+
 from app.schema_meta import BUSINESS_SCHEMA
 
 # 停用词
@@ -76,25 +78,31 @@ _KEYWORD_TABLE_MAP: dict[str, list[str]] = {
 }
 
 
+# jieba 分词允许的词性
+# n: 名词, nr: 人名, ns: 地名, nt: 机构团体名, nz: 其他专有名词
+# v: 动词, vn: 名动词, a: 形容词, an: 名形词
+# eng: 英文, i: 成语, l: 常用固定短语
+_JIEBA_ALLOW_POS = (
+    "n", "nr", "ns", "nt", "nz", "v", "vn", "a", "an", "eng", "i", "l"
+)
+
+
 def _tokenize(text: str) -> list[str]:
-    """分词：提取中文词组和英文单词。"""
-    # 提取中文连续字符
-    chinese = re.findall(r"[\u4e00-\u9fff]+", text)
+    """分词：使用 jieba 提取中文关键词 + 英文单词。
+
+    相比原版的简单滑动窗口分词，jieba 能更准确地识别中文词组边界，
+    例如"销售额"会被识别为一个词而非"销售"+"额"。
+    """
+    tokens: list[str] = []
+
+    # 使用 jieba 提取关键词（基于 TF-IDF）
+    keywords = jieba.analyse.extract_tags(text, allowPOS=_JIEBA_ALLOW_POS)
+    tokens.extend([kw for kw in keywords if kw not in _STOP_WORDS])
+
     # 提取英文单词
     english = re.findall(r"[a-zA-Z]+", text.lower())
-    tokens: list[str] = []
-    for c in chinese:
-        # 简单分词：2-4 字词组
-        for length in range(4, 1, -1):
-            for i in range(len(c) - length + 1):
-                token = c[i:i + length]
-                if token not in _STOP_WORDS:
-                    tokens.append(token)
-        # 单字
-        for ch in c:
-            if ch not in _STOP_WORDS:
-                tokens.append(ch)
     tokens.extend([w for w in english if w not in _STOP_WORDS and len(w) > 1])
+
     return tokens
 
 
