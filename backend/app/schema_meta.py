@@ -1,67 +1,87 @@
 """业务数据库的元信息（schema 描述）。
 
-这是 NL2SQL 的关键：把表结构、字段含义和示例值喂给 LLM，
-让它能准确地把自然语言翻译成 SQL。
-真实项目中可以把这部分迁到数据库或向量库管理。
+⚠️ 已废弃：旧版 users/products/orders 表结构。
+新版数仓表结构见 app.seed_dw 和 app.api.meta.get_schema。
+保留此文件仅兼容旧引用，内容已更新为新版 5 张表。
 """
 
 BUSINESS_SCHEMA = {
     "dialect": "sqlite",
     "tables": [
         {
-            "name": "users",
-            "comment": "用户表",
+            "name": "dim_region",
+            "comment": "地区维度表",
             "columns": [
-                {"name": "id", "type": "INTEGER", "comment": "用户ID（主键）"},
-                {"name": "name", "type": "TEXT", "comment": "用户姓名"},
-                {"name": "gender", "type": "TEXT", "comment": "性别，枚举：male/female"},
-                {"name": "age", "type": "INTEGER", "comment": "年龄"},
-                {"name": "region", "type": "TEXT", "comment": "所在地区，例如：华东、华北、华南、西南、西北、华中、东北"},
-                {"name": "registered_at", "type": "DATE", "comment": "注册日期"},
+                {"name": "region_id", "type": "TEXT", "comment": "地区ID（主键）"},
+                {"name": "province", "type": "TEXT", "comment": "省份"},
+                {"name": "region_name", "type": "TEXT", "comment": "大区名称（华东、华南等）"},
+                {"name": "country", "type": "TEXT", "comment": "国家"},
             ],
         },
         {
-            "name": "products",
-            "comment": "商品表",
+            "name": "dim_customer",
+            "comment": "客户维度表",
             "columns": [
-                {"name": "id", "type": "INTEGER", "comment": "商品ID（主键）"},
-                {"name": "name", "type": "TEXT", "comment": "商品名称"},
-                {"name": "category", "type": "TEXT", "comment": "商品分类，例如：手机、电脑、家电、服饰、食品、图书"},
-                {"name": "price", "type": "REAL", "comment": "商品单价（元）"},
-                {"name": "cost", "type": "REAL", "comment": "商品成本（元）"},
+                {"name": "customer_id", "type": "TEXT", "comment": "客户ID（主键）"},
+                {"name": "customer_name", "type": "TEXT", "comment": "客户姓名"},
+                {"name": "gender", "type": "TEXT", "comment": "性别"},
+                {"name": "member_level", "type": "TEXT", "comment": "会员等级"},
             ],
         },
         {
-            "name": "orders",
-            "comment": "订单表",
+            "name": "dim_product",
+            "comment": "商品维度表",
             "columns": [
-                {"name": "id", "type": "INTEGER", "comment": "订单ID（主键）"},
-                {"name": "user_id", "type": "INTEGER", "comment": "下单用户ID，关联 users.id"},
-                {"name": "product_id", "type": "INTEGER", "comment": "商品ID，关联 products.id"},
-                {"name": "quantity", "type": "INTEGER", "comment": "购买数量"},
-                {"name": "amount", "type": "REAL", "comment": "订单总金额（元）= quantity * price"},
-                {"name": "status", "type": "TEXT", "comment": "订单状态，枚举：paid（已支付）/shipped（已发货）/completed（已完成）/refunded（已退款）"},
-                {"name": "channel", "type": "TEXT", "comment": "下单渠道，枚举：web/app/mini_program"},
-                {"name": "created_at", "type": "DATETIME", "comment": "下单时间"},
+                {"name": "product_id", "type": "TEXT", "comment": "商品ID（主键）"},
+                {"name": "product_name", "type": "TEXT", "comment": "商品名称"},
+                {"name": "category", "type": "TEXT", "comment": "商品品类"},
+                {"name": "brand", "type": "TEXT", "comment": "品牌"},
+            ],
+        },
+        {
+            "name": "dim_date",
+            "comment": "时间维度表",
+            "columns": [
+                {"name": "date_id", "type": "TEXT", "comment": "日期ID（主键，格式yyyyMMdd）"},
+                {"name": "year", "type": "INTEGER", "comment": "年份"},
+                {"name": "quarter", "type": "TEXT", "comment": "季度"},
+                {"name": "month", "type": "INTEGER", "comment": "月份"},
+                {"name": "day", "type": "INTEGER", "comment": "日"},
+            ],
+        },
+        {
+            "name": "fact_order",
+            "comment": "订单事实表",
+            "columns": [
+                {"name": "order_id", "type": "TEXT", "comment": "订单ID（主键）"},
+                {"name": "customer_id", "type": "TEXT", "comment": "客户ID，关联 dim_customer"},
+                {"name": "product_id", "type": "TEXT", "comment": "商品ID，关联 dim_product"},
+                {"name": "date_id", "type": "TEXT", "comment": "日期ID，关联 dim_date"},
+                {"name": "region_id", "type": "TEXT", "comment": "地区ID，关联 dim_region"},
+                {"name": "order_quantity", "type": "INTEGER", "comment": "购买数量"},
+                {"name": "order_amount", "type": "REAL", "comment": "订单金额"},
             ],
         },
     ],
     "relations": [
-        "orders.user_id -> users.id",
-        "orders.product_id -> products.id",
+        "fact_order.customer_id -> dim_customer.customer_id",
+        "fact_order.product_id -> dim_product.product_id",
+        "fact_order.date_id -> dim_date.date_id",
+        "fact_order.region_id -> dim_region.region_id",
     ],
     "hints": [
-        "时间范围筛选请使用 created_at（订单）或 registered_at（用户）",
-        "金额相关分析（销售额/营收）请使用 orders.amount",
-        "利润 = orders.amount - products.cost * orders.quantity",
-        "已完成的有效订单状态为 paid、shipped、completed（排除 refunded）",
-        "日期函数请使用 SQLite 语法，例如 strftime('%Y-%m', created_at)",
+        "时间范围筛选请使用 dim_date.date_id（格式 yyyyMMdd）或 dim_date.year/month",
+        "金额相关分析请使用 fact_order.order_amount",
+        "数量相关分析请使用 fact_order.order_quantity",
+        "地区分析请使用 dim_region.region_name 或 dim_region.province",
+        "客户分析请使用 dim_customer.member_level 或 dim_customer.gender",
+        "商品分析请使用 dim_product.category 或 dim_product.brand",
     ],
 }
 
 
 def render_schema_prompt() -> str:
-    """把 schema 渲染成喂给 LLM 的文本。"""
+    """把 schema 渲染成喂给 LLM 的文本。（已适配新版数仓表）"""
     lines: list[str] = []
     lines.append(f"数据库方言: {BUSINESS_SCHEMA['dialect']}")
     lines.append("")
