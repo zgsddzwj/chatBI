@@ -1,18 +1,18 @@
-"""Agent 运行时上下文定义。"""
-from __future__ import annotations
-
 from typing import TypedDict
 
-from app.config import Settings
-from app.services.llm import LLMClient
+from langchain_huggingface import HuggingFaceEndpointEmbeddings
+
+from app.repositories.es.value_es_repository import ValueESRepository
+from app.repositories.mysql.dw.dw_mysql_repository import DWMySQLRepository
+from app.repositories.mysql.meta.meta_mysql_repository import MetaMySQLRepository
+from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantRepository
+from app.repositories.qdrant.metric_qdrant_repository import MetricQdrantRepository
 
 
-class ChatContext(TypedDict):
-    """运行时上下文，通过 LangGraph 的 context 参数注入每个节点。
-
-    注意：TypedDict 不能包含非序列化对象（如数据库连接），
-    所以这里只放轻量级的配置和客户端。
-    """
-
-    llm: LLMClient
-    settings: Settings
+class DataAgentContext(TypedDict):
+    embedding_client: HuggingFaceEndpointEmbeddings
+    column_qdrant_repository: ColumnQdrantRepository
+    value_es_repository: ValueESRepository
+    metric_qdrant_repository: MetricQdrantRepository
+    meta_mysql_repository: MetaMySQLRepository
+    dw_mysql_repository: DWMySQLRepository

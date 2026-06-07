@@ -1,34 +1,58 @@
-"""Agent 工作流状态定义。"""
-from __future__ import annotations
-
 from typing import TypedDict
 
+from app.entities.column_info import ColumnInfo
+from app.entities.metric_info import MetricInfo
+from app.entities.value_info import ValueInfo
 
-class ChatState(TypedDict):
-    """工作流状态，每个节点读写其中的字段。"""
 
-    # 输入
-    question: str
-    history: list[dict[str, str]] | None
+class ColumnInfoState(TypedDict):
+    name: str
+    type: str
+    role: str
+    examples: list
+    description: str
+    alias: list[str]
 
-    # 中间状态
+
+class TableInfoState(TypedDict):
+    name: str
+    role: str
+    description: str
+    columns: list[ColumnInfoState]
+
+
+class MetricInfoState(TypedDict):
+    name: str
+    description: str
+    relevant_columns: list[str]
+    alias: list[str]
+
+
+class DateInfoState(TypedDict):
+    date: str
+    weekday: str
+    quarter: str
+
+
+class DBInfoState(TypedDict):
+    dialect: str
+    version: str
+
+
+class DataAgentState(TypedDict):
+    query: str
     keywords: list[str]
-    schema_prompt: str
 
-    # SQL 生成
+    retrieved_columns: list[ColumnInfo]
+    retrieved_values: list[ValueInfo]
+    retrieved_metrics: list[MetricInfo]
+
+    table_infos: list[TableInfoState]
+    metric_infos: list[MetricInfoState]
+
+    date_info: DateInfoState
+    db_info: DBInfoState
+
     sql: str
-    explanation: str
-    needs_clarification: bool
-    clarification: str
 
-    # 验证/纠错
-    error: str | None
-    fixed_sql: str | None
-
-    # 执行结果
-    data: dict | None
-    chart: dict | None
-    summary: str
-
-    # 输出类型
-    type: str  # "answer" | "clarification" | "error"
+    error: str
