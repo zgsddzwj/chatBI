@@ -1,71 +1,42 @@
-"""SQL 生成节点。"""
-from __future__ import annotations
+import yaml
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import PromptTemplate
 
-import logging
-from typing import Any
-
-from app.agent.state import ChatState
-from app.prompt_loader import load_prompt
-from app.services.hybrid_search import render_schema_prompt_hybrid
-from app.services.sql_safety import UnsafeSQLError, ensure_limit, validate_sql
-
-logger = logging.getLogger(__name__)
+from app.agent.context import DataAgentContext
+from app.agent.llm import llm
+from app.agent.state import DataAgentState
+from app.prompt.prompt_loader import load_prompt
 
 
-def generate_sql(state: ChatState) -> dict[str, Any]:
-    """使用 LLM 生成 SQL。"""
-    from app.services.llm import get_llm
+async def generate_sql(state: DataAgentState, runtime):
+    writer = runtime.stream_writer
+    writer({"type": "progress", "step": "生成SQL", "status": "running"})
 
-    question = state["question"]
-    history = state.get("history")
-
-    llm = get_llm()
-
-    # 构建用户 Prompt
-    parts: list[str] = []
-    parts.append("# 数据库 Schema\n")
-    parts.append(render_schema_prompt_hybrid(question, top_k=3))
-    if history:
-        parts.append("\n# 最近的对话（用于理解上下文）")
-        for h in history[-6:]:
-            parts.append(f"{h['role']}: {h['content']}")
-    parts.append("\n# 当前问题")
-    parts.append(question)
-    parts.append("\n请输出 JSON。")
-    user_prompt = "\n".join(parts)
-
-    system_prompt = load_prompt("sql_system")
+    query = state["query"]
+    table_infos = state["table_infos"]
+    metric_infos = state["metric_infos"]
+    date_info = state["date_info"]
+    db_info = state["db_info"]
 
     try:
-        result = llm.chat_json(system_prompt, user_prompt, temperature=0.0)
-    except ValueError as exc:
-        logger.warning("SQL 生成失败: %s", exc)
-        return {"error": str(exc), "needs_clarification": False}
+        prompt = PromptTemplate(
+            template=load_prompt("generate_sql"),
+            input_variables=["query", "table_infos", "metric_infos", "date_info", "db_info"],
+        )
+        output_parser = StrOutputParser()
+        chain = prompt | llm | output_parser
+        result = await chain.ainvoke(
+            {
+                "query": query,
+                "table_infos": yaml.dump(table_infos, allow_unicode=True, sort_keys=False),
+                "metric_infos": yaml.dump(metric_infos, allow_unicode=True, sort_keys=False),
+                "date_info": yaml.dump(date_info, allow_unicode=True, sort_keys=False),
+                "db_info": yaml.dump(db_info, allow_unicode=True, sort_keys=False),
+            }
+        )
 
-    if not isinstance(result, dict):
-        return {"error": "模型返回格式异常", "needs_clarification": False}
-
-    if result.get("needs_clarification"):
-        return {
-            "needs_clarification": True,
-            "clarification": result.get("clarification") or "你的问题信息不够，能否补充？",
-            "type": "clarification",
-        }
-
-    sql = (result.get("sql") or "").strip()
-    if not sql:
-        return {"error": "模型未返回 SQL", "needs_clarification": False}
-
-    try:
-        validated = validate_sql(sql)
-        from app.config import get_settings
-        limited = ensure_limit(validated, get_settings().sql_row_limit)
-    except UnsafeSQLError as exc:
-        return {"error": f"SQL 不安全: {exc}", "needs_clarification": False}
-
-    return {
-        "sql": limited,
-        "explanation": result.get("explanation", ""),
-        "needs_clarification": False,
-        "error": None,
-    }
+        writer({"type": "progress", "step": "生成SQL", "status": "success"})
+        return {"sql": result}
+    except Exception as e:
+        writer({"type": "progress", "step": "生成SQL", "status": "error"})
+        raise

@@ -1,17 +1,21 @@
-"""关键词提取节点。"""
-from __future__ import annotations
+import jieba.analyse
 
-import logging
-
-from app.agent.state import ChatState
-from app.services.keyword_expand import expand_keywords
-
-logger = logging.getLogger(__name__)
+from app.agent.context import DataAgentContext
+from app.agent.state import DataAgentState
 
 
-def extract_keywords(state: ChatState) -> dict:
-    """提取并扩展用户问题的关键词。"""
-    question = state["question"]
-    keywords = expand_keywords(question)
-    logger.info("关键词提取: %s -> %s", question, keywords)
+async def extract_keywords(state: DataAgentState, runtime):
+    writer = runtime.stream_writer
+    writer({"type": "progress", "step": "抽取关键字", "status": "running"})
+
+    query = state["query"]
+
+    allow_pos = (
+        "n", "nr", "ns", "nt", "nz", "v", "vn", "a", "an", "eng", "i", "l"
+    )
+
+    keywords = jieba.analyse.extract_tags(query, allowPOS=allow_pos)
+    keywords = list(set(keywords + [query]))
+
+    writer({"type": "progress", "step": "抽取关键字", "status": "success"})
     return {"keywords": keywords}
