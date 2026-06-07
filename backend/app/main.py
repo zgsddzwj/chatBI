@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -11,7 +12,10 @@ from sqlalchemy import text
 from starlette.middleware.gzip import GZipMiddleware
 
 from app.api import auth, chat, conversations, dashboard, datasource, export, feedback, meta, tasks
+from app.api.routers.query_router import query_router
 from app.config import get_settings
+from app.core.context import request_id_ctx_var
+from app.core.lifespan import lifespan
 from app.database import AppBase, app_engine
 from app.middleware.http import RequestIdMiddleware, SecurityHeadersMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
@@ -26,29 +30,18 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
-    from app import models  # noqa: F401
-    from app.services.cache import clear_expired
-    from app.services.hybrid_search import warmup
-
-    AppBase.metadata.create_all(bind=app_engine)
-    run_migrations()
-    cleared = clear_expired()
-    if cleared:
-        logger.info("启动时清理过期缓存 %d 条", cleared)
-    # 预热混合检索索引
-    warmup()
-    yield
-
-
 app = FastAPI(
     title="ChatBI API",
     description="自然语言对话式 BI 后端",
     version="0.4.0",
     lifespan=lifespan,
 )
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id_ctx_var.set(str(uuid.uuid4()))
+    response = await call_next(request)
+    return response
 
 app.add_middleware(RequestIdMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
@@ -65,15 +58,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.exception_handler(Exception)
-async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    if isinstance(exc, HTTPException):
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-    logger.exception("未处理异常: %s %s", request.method, request.url.path)
-    detail = "服务出现异常，请稍后重试" if settings.is_production else str(exc)
-    return JSONResponse(status_code=500, content={"detail": detail})
 
 
 @app.get("/health", tags=["system"])
@@ -113,3 +97,13 @@ app.include_router(export.router)
 app.include_router(feedback.router)
 app.include_router(meta.router)
 app.include_router(tasks.router)
+app.include_router(query_router)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    logger.exception("未处理异常: %s %s", request.method, request.url.path)
+    detail = "服务出现异常，请稍后重试" if settings.is_production else str(exc)
+    return JSONResponse(status_code=500, content={"detail": detail})
