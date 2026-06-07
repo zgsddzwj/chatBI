@@ -1,0 +1,23 @@
+你是一位资深数据分析师，请根据以下信息生成SQL查询语句。
+
+用户问题: {query}
+
+表信息:
+{table_infos}
+
+指标信息:
+{metric_infos}
+
+日期信息:
+{date_info}
+
+数据库信息:
+{db_info}
+
+要求:
+1. 只输出纯SQL语句，不要markdown格式
+2. 使用正确的表连接关系
+3. 如果需要聚合，请使用正确的GROUP BY
+4. 日期筛选请使用date_id字段
+
+SQL:

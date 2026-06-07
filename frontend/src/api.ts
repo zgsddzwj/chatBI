@@ -42,10 +42,10 @@ export const sendChatStream = (
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-  fetch("/api/chat/stream", {
+  fetch("/api/query", {
     method: "POST",
     headers,
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ query: payload.question }),
     signal: ctrl.signal,
   })
     .then(async (res) => {
@@ -67,7 +67,9 @@ export const sendChatStream = (
           const m = line.trim().match(/^data: (.+)$/);
           if (m) {
             try {
-              const evt: StreamEvent = JSON.parse(m[1]);
+              const raw = JSON.parse(m[1]);
+              // 适配新版 Data Agent 事件格式 -> 旧版 StreamEvent
+              const evt = adaptDataAgentEvent(raw);
               onEvent(evt);
             } catch {
               // ignore malformed
@@ -83,6 +85,39 @@ export const sendChatStream = (
     });
   return () => ctrl.abort();
 };
+
+/** 将新版 Data Agent 事件适配为前端 StreamEvent */
+function adaptDataAgentEvent(raw: any): StreamEvent {
+  const type = raw.type;
+  if (type === "progress") {
+    // 将 progress 映射为 thinking（前端只显示 thinking/sql/data/chart/summary_chunk/done/error）
+    return { type: "thinking" } as StreamEvent;
+  }
+  if (type === "result") {
+    const data = raw.data;
+    // 新版 result 是对象数组，需要转成 QueryResult 格式
+    if (Array.isArray(data) && data.length > 0) {
+      const columns = Object.keys(data[0]);
+      const rows = data.map((row: any) => columns.map((c) => row[c]));
+      return {
+        type: "data",
+        data: { columns, rows, row_count: rows.length },
+      } as StreamEvent;
+    }
+    return { type: "data", data: { columns: [], rows: [], row_count: 0 } } as StreamEvent;
+  }
+  if (type === "sql") {
+    return { type: "sql", sql: raw.sql, explanation: raw.explanation } as StreamEvent;
+  }
+  if (type === "error") {
+    return { type: "error", error: raw.message || raw.error || "未知错误" } as StreamEvent;
+  }
+  if (type === "done") {
+    return { type: "done" } as StreamEvent;
+  }
+  // 其他未知类型，默认透传为 thinking
+  return { type: "thinking" } as StreamEvent;
+}
 
 export const listConversations = async (): Promise<Conversation[]> => {
   const { data } = await api.get<Conversation[]>("/api/conversations");
