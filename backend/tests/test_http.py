@@ -41,6 +41,7 @@ def test_security_headers_present() -> None:
     assert r.headers.get("X-Frame-Options") == "DENY"
 
 
-def test_chat_validation_error_status() -> None:
+def test_chat_deprecated_returns_error() -> None:
     r = client.post("/api/chat", json={})
-    assert r.status_code == 422
+    assert r.status_code == 200
+    assert r.json()["type"] == "error"

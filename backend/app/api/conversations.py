@@ -36,6 +36,19 @@ def get_conversation(
     return conv
 
 
+@router.post("")
+def create_conversation_endpoint(
+    request: Request,
+    db: Session = Depends(get_app_db),
+) -> dict:
+    """创建新会话。"""
+    from app.api.deps import create_conversation
+    user_id = get_optional_user_id(request)
+    conv = create_conversation(db, "新对话", user_id)
+    db.commit()
+    return {"id": conv.id, "title": conv.title, "created_at": conv.created_at.isoformat()}
+
+
 @router.delete("/{conversation_id}")
 def delete_conversation(
     conversation_id: int,
