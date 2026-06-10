@@ -41,7 +41,10 @@ def test_security_headers_present() -> None:
     assert r.headers.get("X-Frame-Options") == "DENY"
 
 
-def test_chat_deprecated_returns_error() -> None:
-    r = client.post("/api/chat", json={})
-    assert r.status_code == 200
-    assert r.json()["type"] == "error"
+def test_chat_compat_endpoint_exists() -> None:
+    """旧版 /api/chat 兼容层端点存在。"""
+    # 由于依赖外部服务，仅验证端点注册正确
+    # 实际转发功能通过集成测试验证
+    from app.main import app
+    routes = [r.path for r in app.routes]
+    assert "/api/chat" in routes
