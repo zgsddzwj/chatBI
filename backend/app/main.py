@@ -63,28 +63,50 @@ app.add_middleware(
 @app.get("/health", tags=["system"])
 def health() -> dict:
     """存活探针：仅表示进程可响应，不访问数据库。"""
-    return {"status": "ok", "service": "chatbi-backend"}
+    return {"status": "ok", "service": "chatbi-backend", "version": "0.5.0"}
 
 
 @app.get("/ready", tags=["system"])
 def ready() -> JSONResponse:
     """就绪探针：校验应用库可连接（编排系统可据此摘流）。"""
+    checks: dict[str, bool] = {}
+
+    # 检查应用数据库
     try:
         with app_engine.connect() as conn:
             conn.execute(text("SELECT 1"))
+        checks["app_db"] = True
     except Exception as exc:  # noqa: BLE001
         logger.exception("就绪检查失败: %s", exc)
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "not_ready",
-                "app_db": False,
-                "error": str(exc) if not settings.is_production else "database unavailable",
-            },
-        )
+        checks["app_db"] = False
+
+    # 检查业务数据库（SQLite mock 数据）
+    try:
+        from app.database import business_engine
+        with business_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        checks["business_db"] = True
+    except Exception:  # noqa: BLE001
+        checks["business_db"] = False
+
+    # 检查向量索引
+    try:
+        from app.services.hybrid_search import _get_vector_index
+        idx = _get_vector_index()
+        checks["vector_index"] = len(idx.ids) > 0
+    except Exception:  # noqa: BLE001
+        checks["vector_index"] = False
+
+    all_ok = all(checks.values())
+    status_code = 200 if all_ok else 503
+    status = "ready" if all_ok else "not_ready"
+
     return JSONResponse(
-        status_code=200,
-        content={"status": "ready", "app_db": True},
+        status_code=status_code,
+        content={
+            "status": status,
+            "checks": checks,
+        },
     )
 
 
