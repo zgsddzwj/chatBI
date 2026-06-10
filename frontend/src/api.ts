@@ -90,8 +90,12 @@ export const sendChatStream = (
 function adaptDataAgentEvent(raw: any): StreamEvent {
   const type = raw.type;
   if (type === "progress") {
-    // 将 progress 映射为 thinking（前端只显示 thinking/sql/data/chart/summary_chunk/done/error）
-    return { type: "thinking" } as StreamEvent;
+    // 新版进度事件：直接透传给前端展示
+    return {
+      type: "progress",
+      step: raw.step,
+      status: raw.status,
+    } as StreamEvent;
   }
   if (type === "result") {
     const data = raw.data;

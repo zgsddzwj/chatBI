@@ -48,9 +48,26 @@ export function useChat({
     let currentChart: ChartSpec | undefined;
     let currentSummary = "";
     let currentMsgId: number | string = placeholder.id;
+    let currentProgress: { step: string; status: string } | null = null;
 
     const handleEvent = (evt: StreamEvent) => {
-      if (evt.type === "thinking" && evt.conversation_id) {
+      if (evt.type === "progress") {
+        // 新版 Data Agent 进度事件
+        currentProgress = evt.step ? { step: evt.step, status: evt.status || "running" } : null;
+        setMessages((prev) => {
+          const next = [...prev];
+          const idx = next.findIndex((m) => m.id === placeholder.id);
+          if (idx >= 0) {
+            next[idx] = {
+              ...next[idx],
+              content: currentProgress ? `正在${currentProgress.step}...` : "",
+              pending: true,
+              streaming: true,
+            };
+          }
+          return next;
+        });
+      } else if (evt.type === "thinking" && evt.conversation_id) {
         setActiveId(evt.conversation_id);
       } else if (evt.type === "sql") {
         currentSql = evt.sql;

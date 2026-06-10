@@ -79,7 +79,13 @@ export type StreamEventType =
   | "summary_chunk"
   | "clarification"
   | "done"
-  | "error";
+  | "error"
+  | "progress"; // 新版 Data Agent 进度事件
+
+export interface ProgressStep {
+  step: string;
+  status: "running" | "success" | "error";
+}
 
 export type StreamEvent =
   | { type: "thinking"; conversation_id?: number }
@@ -89,4 +95,5 @@ export type StreamEvent =
   | { type: "summary_chunk"; conversation_id?: number; chunk?: string; done?: boolean }
   | { type: "clarification"; conversation_id?: number; clarification?: string }
   | { type: "done"; conversation_id?: number; message_id?: number }
-  | { type: "error"; conversation_id?: number; error?: string };
+  | { type: "error"; conversation_id?: number; error?: string }
+  | { type: "progress"; conversation_id?: number; step?: string; status?: "running" | "success" | "error" };
