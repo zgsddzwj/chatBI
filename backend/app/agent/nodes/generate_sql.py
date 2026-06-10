@@ -3,7 +3,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 
 from app.agent.context import DataAgentContext
-from app.agent.llm import llm
+from app.agent.llm import resilient_llm
 from app.agent.state import DataAgentState
 from app.prompt.prompt_loader import load_prompt
 
@@ -24,7 +24,7 @@ async def generate_sql(state: DataAgentState, runtime):
             input_variables=["query", "table_infos", "metric_infos", "date_info", "db_info"],
         )
         output_parser = StrOutputParser()
-        chain = prompt | llm | output_parser
+        chain = prompt | resilient_llm | output_parser
         result = await chain.ainvoke(
             {
                 "query": query,
