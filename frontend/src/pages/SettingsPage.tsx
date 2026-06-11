@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Table, Tag, Typography, message as msgApi, Card, Form, Select, Switch, InputNumber, Button, Space } from "antd";
-import { listDataSources } from "../api";
-import type { DataSource } from "../api";
+import { Table, Tag, Typography, message as msgApi, Card, Form, Select, Switch, InputNumber, Button, Space, Statistic, Row, Col, Popconfirm } from "antd";
+import { listDataSources, getCacheStats, clearCache } from "../api";
+import type { DataSource, CacheStats } from "../api";
 // import { getAuditLogs, type AuditLog } from "../api";
 
 interface AuditLog {
@@ -18,13 +18,29 @@ export function SettingsPage() {
   const { user } = useAuth();
   const [sources, setSources] = useState<DataSource[]>([]);
   const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const { prefs, setPrefs, resetPrefs } = usePreferences();
+
+  const loadCacheStats = () => {
+    getCacheStats().then(setCacheStats).catch(() => msgApi.error("加载缓存统计失败"));
+  };
+
+  const handleClearCache = async () => {
+    try {
+      const res = await clearCache();
+      msgApi.success(res.message);
+      loadCacheStats();
+    } catch {
+      msgApi.error("清空缓存失败");
+    }
+  };
 
   useEffect(() => {
     listDataSources().then(setSources).catch(() => msgApi.error("加载数据源失败"));
     if (user?.role === "admin") {
       // getAuditLogs().then(setLogs).catch(() => undefined);
       setLogs([]);
+      loadCacheStats();
     }
   }, [user]);
 
@@ -90,6 +106,51 @@ export function SettingsPage() {
 
       {user?.role === "admin" && (
         <>
+          <Typography.Title level={5} style={{ marginTop: 24 }}>查询缓存管理</Typography.Title>
+          <Card style={{ marginBottom: 24 }}>
+            <Row gutter={16}>
+              <Col span={6}>
+                <Statistic title="总条目" value={cacheStats?.total_entries ?? 0} />
+              </Col>
+              <Col span={6}>
+                <Statistic title="活跃缓存" value={cacheStats?.active_entries ?? 0} />
+              </Col>
+              <Col span={6}>
+                <Statistic title="总命中" value={cacheStats?.total_hits ?? 0} />
+              </Col>
+              <Col span={6}>
+                <Statistic title="命中率" value={cacheStats?.hit_rate ?? 0} suffix="%" />
+              </Col>
+            </Row>
+            <div style={{ marginTop: 16 }}>
+              <Popconfirm
+                title="确认清空所有缓存？"
+                onConfirm={handleClearCache}
+                okText="确认"
+                cancelText="取消"
+              >
+                <Button danger>清空缓存</Button>
+              </Popconfirm>
+              <Button style={{ marginLeft: 8 }} onClick={loadCacheStats}>刷新</Button>
+            </div>
+            {cacheStats && cacheStats.top_queries.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <Typography.Text strong>热门查询 Top 5</Typography.Text>
+                <Table
+                  rowKey={(r) => r.sql}
+                  dataSource={cacheStats.top_queries}
+                  size="small"
+                  pagination={false}
+                  columns={[
+                    { title: "SQL", dataIndex: "sql", ellipsis: true },
+                    { title: "命中次数", dataIndex: "hits", width: 100 },
+                    { title: "最后命中", dataIndex: "last_hit", width: 180 },
+                  ]}
+                />
+              </div>
+            )}
+          </Card>
+
           <Typography.Title level={5} style={{ marginTop: 24 }}>审计日志</Typography.Title>
           <Table
             rowKey="id"

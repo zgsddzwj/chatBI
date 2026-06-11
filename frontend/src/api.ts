@@ -263,3 +263,33 @@ export const submitFeedback = async (payload: FeedbackPayload): Promise<{ id: nu
   const { data } = await api.post<{ id: number }>("/api/feedback", payload);
   return data;
 };
+
+// ========== 缓存管理 API ==========
+
+export interface CacheStats {
+  total_entries: number;
+  active_entries: number;
+  expired_entries: number;
+  total_hits: number;
+  hit_rate: number;
+  top_queries: Array<{
+    sql: string;
+    hits: number;
+    last_hit: string | null;
+  }>;
+}
+
+export const getCacheStats = async (): Promise<CacheStats> => {
+  const { data } = await api.get<CacheStats>("/api/meta/cache/stats");
+  return data;
+};
+
+export const clearCache = async (): Promise<{ cleared: number; message: string }> => {
+  const { data } = await api.post<{ cleared: number; message: string }>("/api/meta/cache/clear");
+  return data;
+};
+
+export const findSimilarCache = async (q: string, limit: number = 3): Promise<{ query: string; similar_queries: any[] }> => {
+  const { data } = await api.get("/api/meta/cache/similar", { params: { q, limit } });
+  return data;
+};
