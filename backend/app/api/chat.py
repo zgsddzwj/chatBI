@@ -118,3 +118,37 @@ async def get_autocomplete(q: str = "", limit: int = 5) -> dict:
     from app.services.query_suggestions import get_autocomplete
     results = get_autocomplete(prefix=q, limit=limit)
     return {"results": results}
+
+
+# ========== 查询历史接口 ==========
+
+@router.get("/history/{user_id}")
+async def get_user_history(user_id: int, limit: int = 20, offset: int = 0) -> dict:
+    """获取用户查询历史。"""
+    from app.services.query_history import get_user_query_history
+    history = get_user_query_history(user_id, limit, offset)
+    return {"history": history}
+
+
+@router.get("/history/{user_id}/stats")
+async def get_user_stats(user_id: int) -> dict:
+    """获取用户查询统计。"""
+    from app.services.query_history import get_query_stats
+    stats = get_query_stats(user_id)
+    return stats
+
+
+@router.get("/history/{user_id}/recommendations")
+async def get_user_recommendations(user_id: int, limit: int = 5) -> dict:
+    """获取个性化查询推荐。"""
+    from app.services.query_history import get_query_recommendations
+    recs = get_query_recommendations(user_id, limit)
+    return {"recommendations": recs}
+
+
+@router.get("/history/{user_id}/patterns")
+async def get_user_patterns(user_id: int) -> dict:
+    """分析用户查询模式。"""
+    from app.services.query_history import get_query_patterns
+    patterns = get_query_patterns(user_id)
+    return {"patterns": patterns}

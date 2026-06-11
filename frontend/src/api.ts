@@ -293,3 +293,77 @@ export const findSimilarCache = async (q: string, limit: number = 3): Promise<{ 
   const { data } = await api.get("/api/meta/cache/similar", { params: { q, limit } });
   return data;
 };
+
+// ========== 查询建议 API ==========
+
+export const getSuggestions = async (
+  q: string = "",
+  conversationId?: number,
+  limit: number = 8
+): Promise<{ suggestions: Array<{ text: string; source: string; score: number }> }> => {
+  const { data } = await api.get("/api/chat/suggestions", {
+    params: { q, conversation_id: conversationId, limit },
+  });
+  return data;
+};
+
+export const getAutocomplete = async (q: string, limit: number = 5): Promise<string[]> => {
+  const { data } = await api.get("/api/chat/autocomplete", { params: { q, limit } });
+  return data.results;
+};
+
+// ========== 查询历史 API ==========
+
+export interface QueryHistoryItem {
+  conversation_id: number;
+  sql: string;
+  intent: string | null;
+  success: boolean;
+  created_at: string;
+}
+
+export interface QueryStats {
+  total_queries: number;
+  success_rate: number;
+  top_intents: Array<{ intent: string; count: number }>;
+}
+
+export interface QueryRecommendation {
+  sql: string;
+  intent: string;
+  source: string;
+  score: number;
+}
+
+export interface QueryPattern {
+  pattern: string;
+  sql: string;
+  count: number;
+}
+
+export const getHistory = async (
+  userId: number,
+  limit: number = 20,
+  offset: number = 0,
+): Promise<{ history: QueryHistoryItem[] }> => {
+  const { data } = await api.get(`/api/chat/history/${userId}`, { params: { limit, offset } });
+  return data;
+};
+
+export const getHistoryStats = async (userId: number): Promise<QueryStats> => {
+  const { data } = await api.get(`/api/chat/history/${userId}/stats`);
+  return data;
+};
+
+export const getHistoryRecommendations = async (
+  userId: number,
+  limit: number = 5,
+): Promise<{ recommendations: QueryRecommendation[] }> => {
+  const { data } = await api.get(`/api/chat/history/${userId}/recommendations`, { params: { limit } });
+  return data;
+};
+
+export const getHistoryPatterns = async (userId: number): Promise<{ patterns: QueryPattern[] }> => {
+  const { data } = await api.get(`/api/chat/history/${userId}/patterns`);
+  return data;
+};

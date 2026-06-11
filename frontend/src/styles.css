@@ -329,3 +329,46 @@ img[loading="lazy"] {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ========== 查询建议下拉 ========== */
+.query-suggestions {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #e8ebf3;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 100;
+  padding: 6px 0;
+}
+
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: background 0.12s;
+  gap: 6px;
+}
+
+.suggestion-item:hover {
+  background: #f4f6fb;
+}
+
+.suggestion-text {
+  flex: 1;
+  font-size: 13px;
+  color: #2f3548;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion-tag {
+  flex-shrink: 0;
+  font-size: 11px;
+}

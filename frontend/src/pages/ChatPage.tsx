@@ -213,7 +213,7 @@ export function ChatPage() {
         )}
       </div>
 
-      <ChatInput value={input} loading={loading} onChange={setInput} onSend={sendQuestion} />
+      <ChatInput value={input} loading={loading} onChange={setInput} onSend={sendQuestion} conversationId={activeId || undefined} />
 
       <LoginModal
         open={loginOpen}

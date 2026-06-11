@@ -11,8 +11,10 @@ interface AuditLog {
   created_at: string;
   detail?: string;
 }
+
 import { useAuth } from "../contexts/AuthContext";
 import { usePreferences } from "../hooks/usePreferences";
+import { QueryAssistant } from "../components/QueryAssistant";
 
 export function SettingsPage() {
   const { user } = useAuth();
@@ -165,6 +167,9 @@ export function SettingsPage() {
           />
         </>
       )}
+      <div style={{ marginTop: 32 }}>
+        <QueryAssistant />
+      </div>
     </div>
   );
 }
