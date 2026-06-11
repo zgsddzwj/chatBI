@@ -55,3 +55,38 @@ async def detect_intent(request: Request) -> dict:
     result = classify_intent(question)
     result["suggestions"] = get_intent_suggestions(result["intent"])
     return result
+
+
+# ========== 多轮对话上下文接口 ==========
+
+@router.post("/context/expand")
+async def expand_with_context(request: Request) -> dict:
+    """基于上下文扩展用户问题（指代消解）。"""
+    from app.services.conversation_context import expand_question, get_context
+    
+    body = await request.json()
+    conversation_id = body.get("conversation_id", 0)
+    question = body.get("question", "")
+    expanded = expand_question(conversation_id, question)
+    ctx = get_context(conversation_id)
+    return {
+        "original": question,
+        "expanded": expanded,
+        "context": ctx.to_dict(),
+    }
+
+
+@router.get("/context/{conversation_id}")
+async def get_conversation_context(conversation_id: int) -> dict:
+    """获取对话上下文。"""
+    from app.services.conversation_context import get_context
+    ctx = get_context(conversation_id)
+    return ctx.to_dict()
+
+
+@router.delete("/context/{conversation_id}")
+async def clear_conversation_context(conversation_id: int) -> dict:
+    """清空对话上下文。"""
+    from app.services.conversation_context import clear_context
+    clear_context(conversation_id)
+    return {"message": "上下文已清空"}
