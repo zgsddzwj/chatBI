@@ -235,3 +235,70 @@ def find_similar_queries(intent: str, limit: int = 3) -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             continue
     return results
+
+
+# ========== 缓存预热 ==========
+
+WARMUP_QUERIES = [
+    ("SELECT strftime('%Y-%m', d.date_id) AS month, SUM(f.order_amount) AS total_sales FROM fact_order f JOIN dim_date d ON f.date_id = d.date_id WHERE d.year = 2024 GROUP BY month ORDER BY month", "2024年每月销售额"),
+    ("SELECT p.category, SUM(f.order_amount) AS total FROM fact_order f JOIN dim_product p ON f.product_id = p.product_id GROUP BY p.category ORDER BY total DESC", "各品类销售额"),
+    ("SELECT r.region_name, COUNT(*) AS order_count FROM fact_order f JOIN dim_region r ON f.region_id = r.region_id GROUP BY r.region_name ORDER BY order_count DESC", "各地区订单数量"),
+    ("SELECT p.product_name, SUM(f.order_amount) AS revenue FROM fact_order f JOIN dim_product p ON f.product_id = p.product_id GROUP BY p.product_name ORDER BY revenue DESC LIMIT 5", "销售额前5商品"),
+    ("SELECT c.member_level, SUM(f.order_amount) AS total FROM fact_order f JOIN dim_customer c ON f.customer_id = c.customer_id GROUP BY c.member_level ORDER BY total DESC", "各会员等级消费"),
+]
+
+
+def warmup_cache() -> int:
+    """预热缓存：执行热门查询并缓存结果。
+    
+    返回预热成功的条数。
+    """
+    from app.agent.nodes.execute_sql import execute_sql_node
+    
+    _init_cache_tables()
+    warmed = 0
+    for sql, intent in WARMUP_QUERIES:
+        key = _make_key(sql)
+        # 检查是否已缓存
+        with app_engine.begin() as conn:
+            exists = conn.execute(
+                text("SELECT 1 FROM query_cache WHERE cache_key = :key AND expires_at > CURRENT_TIMESTAMP"),
+                {"key": key},
+            ).fetchone()
+        if exists:
+            continue
+        try:
+            result = execute_sql_node(sql)
+            if result.get("error"):
+                continue
+            set_cache(sql, result, query_intent=intent, ttl=3600)
+            warmed += 1
+            logger.info("Cache warmed: %s", intent)
+        except Exception as e:
+            logger.warning("Cache warmup failed for %s: %s", intent, e)
+    return warmed
+
+
+# ========== 智能 TTL ==========
+
+TTL_RULES = [
+    # (匹配模式, 秒数, 描述)
+    ("count(*)", 300, "计数查询 TTL 5 分钟"),
+    ("sum(", 600, "求和查询 TTL 10 分钟"),
+    ("avg(", 600, "平均值查询 TTL 10 分钟"),
+    ("group by", 900, "分组查询 TTL 15 分钟"),
+    ("limit 5", 1800, "Top N 查询 TTL 30 分钟"),
+    ("limit 10", 1800, "Top 10 查询 TTL 30 分钟"),
+]
+
+
+def smart_ttl(sql: str) -> int:
+    """根据 SQL 特征返回智能 TTL。
+    
+    默认使用配置中的 cache_ttl_seconds。
+    """
+    normalized = _normalize_sql(sql)
+    for pattern, ttl, _ in TTL_RULES:
+        if pattern in normalized:
+            return ttl
+    return _cache_ttl()
