@@ -253,7 +253,7 @@ def warmup_cache() -> int:
     
     返回预热成功的条数。
     """
-    from app.agent.nodes.execute_sql import execute_sql_node
+    from app.database import business_engine
     
     _init_cache_tables()
     warmed = 0
@@ -268,10 +268,15 @@ def warmup_cache() -> int:
         if exists:
             continue
         try:
-            result = execute_sql_node(sql)
-            if result.get("error"):
-                continue
-            set_cache(sql, result, query_intent=intent, ttl=3600)
+            with business_engine.connect() as conn:
+                result = conn.execute(text(sql))
+                rows = [dict(row._mapping) for row in result.fetchall()]
+            result_data = {
+                "columns": list(rows[0].keys()) if rows else [],
+                "rows": [list(row.values()) for row in rows],
+                "row_count": len(rows),
+            }
+            set_cache(sql, result_data, query_intent=intent, ttl=3600)
             warmed += 1
             logger.info("Cache warmed: %s", intent)
         except Exception as e:
