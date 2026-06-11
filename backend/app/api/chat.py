@@ -90,3 +90,31 @@ async def clear_conversation_context(conversation_id: int) -> dict:
     from app.services.conversation_context import clear_context
     clear_context(conversation_id)
     return {"message": "上下文已清空"}
+
+
+# ========== 查询建议接口 ==========
+
+@router.get("/suggestions")
+async def get_query_suggestions(
+    q: str = "",
+    conversation_id: int | None = None,
+    limit: int = 8,
+) -> dict:
+    """获取查询建议。
+    
+    基于输入前缀、意图、热门查询、历史记录生成建议。
+    """
+    from app.services.query_suggestions import get_suggestions
+    suggestions = get_suggestions(prefix=q, conversation_id=conversation_id, limit=limit)
+    return {"suggestions": suggestions}
+
+
+@router.get("/autocomplete")
+async def get_autocomplete(q: str = "", limit: int = 5) -> dict:
+    """查询自动补全。
+    
+    返回匹配前缀的建议文本列表。
+    """
+    from app.services.query_suggestions import get_autocomplete
+    results = get_autocomplete(prefix=q, limit=limit)
+    return {"results": results}
