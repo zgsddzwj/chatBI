@@ -111,3 +111,28 @@ def search_schema(q: str, top_k: int = 5) -> dict:
         "message": "该接口已废弃，新版检索通过 /api/query 内部调用 Qdrant + ES 完成。",
         "results": [],
     }
+
+
+# ========== 缓存管理接口 ==========
+
+@router.get("/cache/stats")
+def get_cache_stats() -> dict:
+    """获取查询缓存统计信息。"""
+    from app.services.cache_v2 import get_cache_stats
+    return get_cache_stats()
+
+
+@router.post("/cache/clear")
+def clear_cache() -> dict:
+    """清空所有查询缓存。"""
+    from app.services.cache_v2 import clear_all_cache
+    count = clear_all_cache()
+    return {"cleared": count, "message": f"已清空 {count} 条缓存"}
+
+
+@router.get("/cache/similar")
+def find_similar_cache(q: str, limit: int = 3) -> dict:
+    """查找相似的历史查询（语义缓存）。"""
+    from app.services.cache_v2 import find_similar_queries
+    results = find_similar_queries(q, limit)
+    return {"query": q, "similar_queries": results}
