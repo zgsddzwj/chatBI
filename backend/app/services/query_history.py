@@ -9,11 +9,10 @@
 """
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 
 from app.database import app_engine
 
@@ -118,7 +117,7 @@ def get_query_recommendations(
             recent_intents = [r.query_intent for r in rows]
         
         # 基于意图找到相似用户
-        similar_users = set()
+        similar_users: set[int] = set()
         if recent_intents:
             with app_engine.begin() as conn:
                 rows = conn.execute(
@@ -131,25 +130,29 @@ def get_query_recommendations(
                         HAVING COUNT(DISTINCT query_intent) >= 2
                         ORDER BY COUNT(*) DESC
                         LIMIT 10
-                    """),
-                    {"intents": tuple(recent_intents), "uid": user_id},
+                    """).bindparams(
+                        bindparam("intents", recent_intents, expanding=True),
+                        bindparam("uid", user_id),
+                    ),
                 ).fetchall()
                 similar_users = {r.user_id for r in rows}
-        
-        # 从相似用户获取推荐查询
-        for sim_uid in similar_users:
+
+        # 批量获取所有相似用户的推荐查询（避免 N+1 查询）
+        if similar_users:
+            similar_uids = list(similar_users)
             with app_engine.begin() as conn:
                 rows = conn.execute(
                     text("""
-                        SELECT sql_text
+                        SELECT sql_text, user_id
                         FROM message_history
-                        WHERE user_id = :sim_uid
+                        WHERE user_id IN :uids
                           AND success = 1
                         GROUP BY sql_text
                         ORDER BY COUNT(*) DESC
-                        LIMIT 3
-                    """),
-                    {"sim_uid": sim_uid},
+                        LIMIT 30
+                    """).bindparams(
+                        bindparam("uids", similar_uids, expanding=True),
+                    ),
                 ).fetchall()
                 for r in rows:
                     try:
@@ -204,31 +207,25 @@ def get_query_patterns(user_id: int) -> list[dict[str, Any]]:
         with app_engine.begin() as conn:
             rows = conn.execute(
                 text("""
-                    SELECT sql_text
+                    SELECT sql_text, COUNT(*) as cnt
                     FROM message_history
                     WHERE user_id = :uid AND success = 1
                     GROUP BY sql_text
-                    ORDER BY COUNT(*) DESC
-                    LIMIT 20
+                    ORDER BY cnt DESC
+                    LIMIT 5
                 """),
                 {"uid": user_id},
             ).fetchall()
-        
-        # 简单模式提取
-        for r in rows[:5]:
-            sql = r.sql_text
-            # 提取基本结构
-            pattern = _extract_pattern(sql)
-            count = conn.execute(
-                text("SELECT COUNT(*) FROM message_history WHERE sql_text = :sql"),
-                {"sql": sql},
-            ).scalar() or 1
-            patterns.append({
-                "pattern": pattern,
-                "sql": sql,
-                "count": count,
-            })
-        
+
+            for r in rows:
+                sql = r.sql_text
+                pattern = _extract_pattern(sql)
+                patterns.append({
+                    "pattern": pattern,
+                    "sql": sql,
+                    "count": r.cnt,
+                })
+
         patterns.sort(key=lambda x: x["count"], reverse=True)
         return patterns[:5]
     except Exception as exc:
