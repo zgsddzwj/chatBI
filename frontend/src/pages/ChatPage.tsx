@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Dropdown, Modal, Input, Spin, Tooltip, message as msgApi } from "antd";
 import { ExportOutlined, ShareAltOutlined, BookOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
@@ -62,7 +62,7 @@ export function ChatPage() {
   const showWelcome = useMemo(() => messages.length === 0, [messages]);
   const useVirtual = messages.length > 50;
 
-  const handleExportMarkdown = async () => {
+  const handleExportMarkdown = useCallback(async () => {
     if (!activeId) return msgApi.warning("请先选择一个对话");
     const blob = await exportConversationMarkdown(activeId);
     const url = URL.createObjectURL(blob);
@@ -71,9 +71,9 @@ export function ChatPage() {
     a.download = `chatbi-conversation-${activeId}.md`;
     a.click();
     URL.revokeObjectURL(url);
-  };
+  }, [activeId]);
 
-  const handleExportJson = async () => {
+  const handleExportJson = useCallback(async () => {
     if (!activeId) return msgApi.warning("请先选择一个对话");
     const blob = await exportConversationJson(activeId);
     const url = URL.createObjectURL(blob);
@@ -82,9 +82,9 @@ export function ChatPage() {
     a.download = `chatbi-conversation-${activeId}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  };
+  }, [activeId]);
 
-  const handleShare = async () => {
+  const handleShare = useCallback(async () => {
     if (!activeId) return msgApi.warning("请先选择一个对话");
     try {
       const res = await createShareLink(activeId);
@@ -94,9 +94,9 @@ export function ChatPage() {
       const ax = err as { response?: { data?: { detail?: string } } };
       msgApi.error(ax?.response?.data?.detail || "创建分享链接失败");
     }
-  };
+  }, [activeId]);
 
-  const handleBookmark = (m: (typeof messages)[0]) => {
+  const handleBookmark = useCallback((m: (typeof messages)[0]) => {
     try {
       const question = m.summary || m.content;
       addTemplate({
@@ -110,9 +110,9 @@ export function ChatPage() {
     } catch (err) {
       msgApi.error("收藏失败");
     }
-  };
+  }, [addTemplate]);
 
-  const handlePin = (m: (typeof messages)[0]) => {
+  const handlePin = useCallback((m: (typeof messages)[0]) => {
     if (!m.chart || m.chart.type === "empty" || m.chart.type === "table") return;
     createCard({
       title: m.summary?.slice(0, 30) || "未命名图表",
@@ -126,7 +126,7 @@ export function ChatPage() {
         navigate("/dashboards");
       })
       .catch(() => msgApi.error("收藏失败，请登录"));
-  };
+  }, [navigate]);
 
   return (
     <>

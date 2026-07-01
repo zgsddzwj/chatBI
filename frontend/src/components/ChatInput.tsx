@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Button, Input } from "antd";
 import { SendOutlined } from "@ant-design/icons";
 import { QuerySuggestions } from "./QuerySuggestions";
@@ -11,7 +11,7 @@ interface Props {
   conversationId?: number;
 }
 
-export function ChatInput({ value, loading, onChange, onSend, conversationId }: Props) {
+export const ChatInput = memo(function ChatInput({ value, loading, onChange, onSend, conversationId }: Props) {
   const [focused, setFocused] = useState(false);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -57,4 +57,4 @@ export function ChatInput({ value, loading, onChange, onSend, conversationId }: 
       <div className="tip">仅支持只读 SELECT 查询 · LLM 生成的结果请人工核对</div>
     </div>
   );
-}
+});

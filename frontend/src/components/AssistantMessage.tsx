@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Tabs, Tag, Tooltip, Button, message as msgApi, Rate, Input } from "antd";
 import {
   BarChartOutlined,
@@ -94,7 +94,7 @@ const renderTable = (data: QueryResult) => {
   );
 };
 
-export const AssistantMessage: React.FC<Props> = ({
+export const AssistantMessage = memo<Props>(function AssistantMessage({
   messageId,
   summary,
   sql,
@@ -105,14 +105,14 @@ export const AssistantMessage: React.FC<Props> = ({
   streaming,
   onPin,
   onBookmark,
-}) => {
+}) {
   const [tab, setTab] = useState<string>(() => (chart?.type === "table" ? "table" : "chart"));
   const [rating, setRating] = useState<number>(0);
   const [comment, setComment] = useState<string>("");
   const [feedbackSent, setFeedbackSent] = useState(false);
-  const safeData = normalizeQueryResult(data);
+  const safeData = useMemo(() => normalizeQueryResult(data), [data]);
 
-  const handleRate = async (value: number) => {
+  const handleRate = useCallback(async (value: number) => {
     setRating(value);
     if (messageId && value > 0) {
       try {
@@ -123,7 +123,7 @@ export const AssistantMessage: React.FC<Props> = ({
         msgApi.error("提交失败");
       }
     }
-  };
+  }, [messageId, comment]);
 
   if (error) {
     return (
@@ -143,7 +143,7 @@ export const AssistantMessage: React.FC<Props> = ({
     );
   }
 
-  const copySQL = async () => {
+  const copySQL = useCallback(async () => {
     if (!sql) return;
     try {
       await navigator.clipboard.writeText(sql);
@@ -151,7 +151,7 @@ export const AssistantMessage: React.FC<Props> = ({
     } catch {
       msgApi.error("复制失败，请检查浏览器权限");
     }
-  };
+  }, [sql]);
 
   return (
     <div className="assistant-card">
@@ -260,4 +260,4 @@ export const AssistantMessage: React.FC<Props> = ({
       )}
     </div>
   );
-};
+});
