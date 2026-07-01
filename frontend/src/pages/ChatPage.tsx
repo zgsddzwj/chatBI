@@ -162,7 +162,7 @@ export function ChatPage() {
           ) : (
             <Button size="small" type="primary" onClick={() => setLoginOpen(true)}>登录</Button>
           )}
-          <span className="message-meta">v0.4</span>
+          <span className="message-meta">v0.5</span>
         </div>
       </header>
 

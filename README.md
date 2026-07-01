@@ -26,9 +26,15 @@
 - **Prompt 文件化管理**：所有 Prompt 独立到 `prompts/` 目录，热更新无需重启
 - **SQL 安全校验**：禁止 DML/DDL，禁止多语句，自动加 LIMIT
 - **SQL 自动纠错**：执行失败时 LLM 自动修正，最多 2 次重试
+- **LLM 调用容错**：指数退避重试 + 熔断器 + JSON 自动修复，保障服务稳定性
+- **API 输入校验**：Pydantic 模型自动校验请求体，非法输入返回 422
+- **数据库连接池优化**：SQLite PRAGMA 调优（WAL + 内存映射 + 缓存）+ 会话异常自动回滚
 - 自动选择最合适的图表（KPI / 柱图 / 折线 / 饼图 / 热力图 / 相关性图 / 表格）
 - 多轮对话 + 会话历史持久化
 - 支持 LLM 的"澄清式追问"
+- **智能查询助手**：查询建议 + 自动补全 + 意图识别 + 多轮上下文管理
+- **查询历史分析**：用户行为统计 + 协同过滤推荐 + SQL 模式识别
+- **缓存系统 V2**：语义缓存 + 智能 TTL + 缓存预热 + 命中统计
 - 内置 8 个示例问题，零门槛上手
 
 ## 目录结构
@@ -57,14 +63,19 @@ chatBI/
 │   │   ├── middleware/            # 请求 ID、安全响应头等
 │   │   ├── api/                   # 路由：chat / conversations / meta
 │   │   ├── services/
-│   │   │   ├── llm.py             # DeepSeek 客户端
+│   │   │   ├── llm.py             # LLM 客户端（重试+熔断+JSON修复）
 │   │   │   ├── nl2sql.py          # NL2SQL 核心流程（兼容旧接口）
 │   │   │   ├── hybrid_search.py   # Schema 混合检索（FTS5 + Embedding + RRF）
 │   │   │   ├── keyword_expand.py  # LLM 关键词扩展
 │   │   │   ├── schema_builder.py  # 元数据知识库自动构建
 │   │   │   ├── sql_safety.py      # SQL 安全校验
 │   │   │   ├── sql_fixer.py       # SQL 纠错重试
-│   │   │   └── chart.py           # 图表推荐
+│   │   │   ├── chart.py           # 图表推荐
+│   │   │   ├── cache_v2.py        # 缓存系统 V2（语义缓存+智能TTL）
+│   │   │   ├── intent_classifier.py # 查询意图识别
+│   │   │   ├── conversation_context.py # 多轮对话上下文
+│   │   │   ├── query_suggestions.py # 查询建议与自动补全
+│   │   │   └── query_history.py   # 查询历史分析与推荐
 │   │   ├── schema_meta.py         # 业务表结构元数据（喂给 LLM）
 │   │   ├── prompt_loader.py       # Prompt 文件加载器
 │   │   ├── seed.py                # 生成 mock 数据
@@ -312,21 +323,35 @@ app/
 - **可测试**：Repository 接口便于 Mock 单元测试
 - **可扩展**：新增数据源只需实现对应 Repository
 
-### 5. 元数据知识库自动构建
+### 6. LLM 调用容错
 
-`schema_builder.py` 自动从数据源抽取 Schema：
+LLM 服务不稳定时自动保护：
+
+- **指数退避重试**：网络超时/连接错误自动重试 3 次，间隔指数递增
+- **熔断器**：连续失败 5 次触发熔断，60 秒后半开恢复
+- **JSON 修复**：自动移除 markdown 标记、修复尾随逗号、提取 JSON 主体
 
 ```python
-# 为指定数据源构建 Schema
-build_schema_for_source(source_id=1)
-
-# 重建混合检索索引
-rebuild_hybrid_index()
+from app.services.llm import get_llm
+llm = get_llm()
+result = llm.chat_json(system, user)  # 自动重试+熔断保护
 ```
 
-- 自动识别表结构、字段、外键关系
-- 支持 SQLite / PostgreSQL / MySQL
-- Schema 保存到数据源配置，支持多数据源
+### 7. 数据库性能优化
+
+SQLite 调优：
+
+- **WAL 模式**：并发读不阻塞写
+- **cache_size = 20MB**：减少磁盘 IO
+- **mmap_size = 256MB**：内存映射替代 read 系统调用
+- **synchronous = NORMAL**：WAL 模式下安全且更快
+- **temp_store = MEMORY**：临时表存内存
+
+PostgreSQL/MySQL 连接池：
+
+- `pool_size=10` + `max_overflow=20`：支持高并发
+- `pool_recycle=3600`：1 小时回收连接，避免数据库端超时
+- `pool_pre_ping=True`：使用前探活，避免使用已断开的连接
 
 ## 切换 LLM
 
@@ -366,6 +391,15 @@ DEEPSEEK_MODEL=qwen-plus
 - [x] **jieba 中文分词**（精准关键词提取）
 - [x] **Repository + ClientManager 模式**（资源生命周期管理）
 - [x] **元数据知识库自动构建**（从数据源自动抽取 Schema）
+- [x] **LLM 调用容错**（指数退避重试 + 熔断器 + JSON 自动修复）
+- [x] **API 输入校验加固**（Pydantic 模型替代裸 request.json，自动 422）
+- [x] **数据库连接池优化**（SQLite PRAGMA 调优 + 会话异常回滚 + 连接池配置）
+- [x] **缓存系统 V2**（语义缓存 + 智能 TTL + 缓存预热 + 命中统计）
+- [x] **查询意图识别**（规则 + LLM 双引擎，8 种意图分类）
+- [x] **多轮对话上下文管理**（指代消解 + 意图继承）
+- [x] **查询建议与自动补全**（示例 + 热门 + 历史 + 前缀多维度推荐）
+- [x] **查询历史分析与推荐**（协同过滤 + 模式识别 + 统计分析）
+- [x] **前端渲染性能优化**（React.memo + useCallback + useMemo）
 
 ### 规划中
 
@@ -373,7 +407,6 @@ DEEPSEEK_MODEL=qwen-plus
 - [ ] API 路由全面接入 LangGraph（替换旧 `nl2sql.py` 调用）
 - [ ] 向量数据库升级（Qdrant / pgvector 替代本地 numpy）
 - [ ] 指标（Metric）概念（预定义业务指标提升复杂查询准确率）
-- [ ] 多轮对话上下文优化（基于 LangGraph 的 checkpoint 机制）
 - [ ] 工作流可视化调试界面
 
 ## License

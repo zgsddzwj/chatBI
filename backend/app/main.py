@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="ChatBI API",
     description="自然语言对话式 BI 后端",
-    version="0.4.0",
+    version="0.5.0",
     lifespan=lifespan,
 )
 
