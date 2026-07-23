@@ -4,8 +4,11 @@
 新版数仓表结构见 app.seed_dw 和 app.api.meta.get_schema。
 保留此文件仅兼容旧引用，内容已更新为新版 5 张表。
 """
+from __future__ import annotations
 
-BUSINESS_SCHEMA = {
+from typing import Any
+
+BUSINESS_SCHEMA: dict[str, Any] = {
     "dialect": "sqlite",
     "tables": [
         {
