@@ -16,8 +16,14 @@ export default defineConfig({
     },
     // 压缩 CSS
     cssMinify: true,
-    // 生成 source map（生产环境可关闭）
+    // 生成 source map（生产环境关闭）
     sourcemap: false,
+    // chunk 大小告警阈值
+    chunkSizeWarningLimit: 600,
+    // 依赖预打包优化
+    modulePreload: { polyfill: true },
+    // 目标浏览器：es2020 兼顾现代浏览器和较新特性
+    target: "es2020",
   },
   server: {
     host: "0.0.0.0",
