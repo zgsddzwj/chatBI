@@ -16,6 +16,9 @@ DANGEROUS_KEYWORDS = {
     "PRAGMA", "VACUUM", "REINDEX",
 }
 
+# 分号后跟内容视为多语句注入尝试
+_SEMICOLON_PATTERN = re.compile(r";\s*\S", re.IGNORECASE)
+
 
 class UnsafeSQLError(ValueError):
     """SQL 校验失败时抛出。"""
@@ -37,6 +40,11 @@ def validate_sql(sql: str) -> str:
         raise UnsafeSQLError("SQL 为空")
 
     cleaned = _strip_comments(sql).rstrip(";").strip()
+
+    # 额外检测：分号后跟非空白内容（多语句注入尝试）
+    if _SEMICOLON_PATTERN.search(cleaned):
+        raise UnsafeSQLError("检测到分号后跟内容，疑似多语句注入")
+
     statements = [s for s in sqlparse.parse(cleaned) if str(s).strip()]
     if len(statements) != 1:
         raise UnsafeSQLError("只允许执行单条 SQL 语句")
