@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import uuid
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -63,7 +64,19 @@ app.add_middleware(
 @app.get("/health", tags=["system"])
 def health() -> dict:
     """存活探针：仅表示进程可响应，不访问数据库。"""
-    return {"status": "ok", "service": "chatbi-backend", "version": "0.5.0"}
+    # 附加 LLM 熔断器状态（轻量，不触发外部调用）
+    circuit_status: dict[str, Any] = {}
+    try:
+        from app.services.llm import get_llm
+        circuit_status = get_llm().get_circuit_status()
+    except Exception:  # noqa: BLE001
+        circuit_status = {"available": False}
+    return {
+        "status": "ok",
+        "service": "chatbi-backend",
+        "version": "0.5.0",
+        "llm_circuit": circuit_status,
+    }
 
 
 @app.get("/ready", tags=["system"])
