@@ -31,7 +31,21 @@ async def lifespan(app: FastAPI):
         logger.warning("Cache warmup failed: %s", exc)
     
     yield
-    await qdrant_client_manager.close()
-    await es_client_manager.close()
-    await meta_mysql_client_manager.close()
-    await dw_mysql_client_manager.close()
+
+    # 按初始化的逆序关闭资源，避免依赖冲突
+    # 先关业务连接，再关搜索引擎，最后关向量库
+    shutdown_errors: list[str] = []
+    for name, manager in [
+        ("dw_mysql", dw_mysql_client_manager),
+        ("meta_mysql", meta_mysql_client_manager),
+        ("es", es_client_manager),
+        ("qdrant", qdrant_client_manager),
+    ]:
+        try:
+            await manager.close()
+        except Exception as exc:  # noqa: BLE001
+            shutdown_errors.append(f"{name}: {exc}")
+            logger.warning("关闭 %s 客户端失败: %s", name, exc)
+
+    if shutdown_errors:
+        logger.error("部分资源关闭失败: %s", "; ".join(shutdown_errors))
