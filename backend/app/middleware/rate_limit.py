@@ -13,12 +13,16 @@ from starlette.responses import JSONResponse, Response
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """按 IP 对 /api/chat 路径限流。"""
 
+    # 每隔多少次请求做一次过期清理，避免 _hits 字典无限膨胀
+    _CLEUP_INTERVAL = 100
+
     def __init__(self, app, max_requests: int = 30, window_seconds: int = 60) -> None:
         super().__init__(app)
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         self._hits: dict[str, list[float]] = defaultdict(list)
         self._lock = Lock()
+        self._request_count = 0
 
     def _client_key(self, request: Request) -> str:
         forwarded = request.headers.get("X-Forwarded-For")
@@ -32,6 +36,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         now = time.monotonic()
         cutoff = now - self.window_seconds
         with self._lock:
+            # 定期清理所有过期 IP 记录，防止内存泄漏
+            self._request_count += 1
+            if self._request_count >= self._CLEUP_INTERVAL:
+                self._request_count = 0
+                stale_keys = [
+                    k for k, ts in self._hits.items()
+                    if not ts or ts[-1] <= cutoff
+                ]
+                for k in stale_keys:
+                    del self._hits[k]
+
             hits = [t for t in self._hits[key] if t > cutoff]
             if len(hits) >= self.max_requests:
                 self._hits[key] = hits
