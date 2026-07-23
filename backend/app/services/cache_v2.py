@@ -21,13 +21,18 @@ from app.database import app_engine
 
 logger = logging.getLogger(__name__)
 
+_tables_initialized = False
+
 
 def _cache_ttl() -> int:
     return get_settings().cache_ttl_seconds
 
 
 def _init_cache_tables() -> None:
-    """初始化缓存表和统计表。"""
+    """初始化缓存表和统计表（仅首次调用时执行 DDL）。"""
+    global _tables_initialized
+    if _tables_initialized:
+        return
     with app_engine.begin() as conn:
         # 主缓存表
         conn.execute(
@@ -57,6 +62,7 @@ def _init_cache_tables() -> None:
                 ON query_cache(query_intent)
             """)
         )
+    _tables_initialized = True
 
 
 def _normalize_sql(sql: str) -> str:
