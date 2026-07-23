@@ -20,6 +20,23 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// 统一响应错误拦截：401 跳登录，其他错误格式化消息
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // token 过期，清除并跳转登录
+      localStorage.removeItem("chatbi_token");
+      localStorage.removeItem("chatbi_user");
+      if (window.location.pathname !== "/") {
+        window.location.href = "/";
+      }
+    }
+    const detail = error.response?.data?.detail || error.message || "请求失败";
+    return Promise.reject(new Error(typeof detail === "string" ? detail : JSON.stringify(detail)));
+  },
+);
+
 export interface ChatPayload {
   question: string;
   conversation_id?: number | null;
