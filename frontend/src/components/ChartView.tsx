@@ -85,6 +85,41 @@ export const ChartView: React.FC<Props> = ({ chart, data }) => {
     setExportLoading(false);
   };
 
+  const exportModal = (
+    <Modal
+      open={exportModalOpen}
+      onCancel={() => setExportModalOpen(false)}
+      onOk={handleExportPng}
+      confirmLoading={exportLoading}
+      title="导出图片"
+      okText="导出"
+      width={400}
+    >
+      <Space direction="vertical" style={{ width: "100%" }}>
+        <div>
+          <span style={{ display: "inline-block", width: 60 }}>宽度:</span>
+          <InputNumber
+            min={400}
+            max={4096}
+            value={exportWidth}
+            onChange={(v) => setExportWidth(v || 1280)}
+            style={{ width: "100%" }}
+          />
+        </div>
+        <div>
+          <span style={{ display: "inline-block", width: 60 }}>高度:</span>
+          <InputNumber
+            min={300}
+            max={4096}
+            value={exportHeight}
+            onChange={(v) => setExportHeight(v || 720)}
+            style={{ width: "100%" }}
+          />
+        </div>
+      </Space>
+    </Modal>
+  );
+
   if (!chart || chart.type === "empty" || !data || data.row_count === 0) {
     return <Empty description="没有查询到匹配的数据" />;
   }
@@ -143,6 +178,7 @@ export const ChartView: React.FC<Props> = ({ chart, data }) => {
           option={option}
           style={{ height: 360 }}
         />
+        {exportModal}
       </div>
     );
   }
@@ -193,6 +229,7 @@ export const ChartView: React.FC<Props> = ({ chart, data }) => {
           option={option}
           style={{ height: 360 }}
         />
+        {exportModal}
       </div>
     );
   }
@@ -245,6 +282,7 @@ export const ChartView: React.FC<Props> = ({ chart, data }) => {
           option={option}
           style={{ height: 360 }}
         />
+        {exportModal}
       </div>
     );
   }
@@ -298,6 +336,7 @@ export const ChartView: React.FC<Props> = ({ chart, data }) => {
           option={option}
           style={{ height: 360 }}
         />
+        {exportModal}
       </div>
     );
   }
@@ -305,38 +344,7 @@ export const ChartView: React.FC<Props> = ({ chart, data }) => {
   return (
     <>
       {renderTable(data, prefs.tablePageSize || 10)}
-      <Modal
-        open={exportModalOpen}
-        onCancel={() => setExportModalOpen(false)}
-        onOk={handleExportPng}
-        confirmLoading={exportLoading}
-        title="导出图片"
-        okText="导出"
-        width={400}
-      >
-        <Space direction="vertical" style={{ width: "100%" }}>
-          <div>
-            <span style={{ display: "inline-block", width: 60 }}>宽度:</span>
-            <InputNumber
-              min={400}
-              max={4096}
-              value={exportWidth}
-              onChange={(v) => setExportWidth(v || 1280)}
-              style={{ width: "100%" }}
-            />
-          </div>
-          <div>
-            <span style={{ display: "inline-block", width: 60 }}>高度:</span>
-            <InputNumber
-              min={300}
-              max={4096}
-              value={exportHeight}
-              onChange={(v) => setExportHeight(v || 720)}
-              style={{ width: "100%" }}
-            />
-          </div>
-        </Space>
-      </Modal>
+      {exportModal}
     </>
   );
 };
