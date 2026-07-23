@@ -30,4 +30,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "Referrer-Policy",
             "strict-origin-when-cross-origin",
         )
+        response.headers.setdefault("X-XSS-Protection", "1; mode=block")
+        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
         return response
