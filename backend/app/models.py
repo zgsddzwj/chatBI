@@ -23,15 +23,15 @@ class Message(AppBase):
     __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
+    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String(20), nullable=False)  # user / assistant
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     content = Column(Text, nullable=False)
     sql = Column(Text, nullable=True)
     result = Column(JSON, nullable=True)
     chart = Column(JSON, nullable=True)
     summary = Column(Text, nullable=True)
     error = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     conversation = relationship("Conversation", back_populates="messages")
 
