@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     embedding_api_key: str = Field(default="", description="Embedding API Key，为空则复用 deepseek_api_key")
     embedding_base_url: str = Field(default="", description="Embedding Base URL，为空则复用 deepseek_base_url")
     embedding_model: str = Field(default="text-embedding-3-small", description="Embedding 模型名称")
+    embedding_dim: int = Field(default=1536, ge=1, le=8192, description="Embedding 向量维度")
 
     business_db_url: str = "sqlite:///./data/business.db"
     business_db_readonly: bool = Field(default=False)
