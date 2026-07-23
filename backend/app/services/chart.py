@@ -41,6 +41,12 @@ def _column_is_date_like(name: str, rows: list[list[Any]], idx: int) -> bool:
 
 
 def recommend_chart(columns: list[str], rows: list[list[Any]]) -> dict[str, Any]:
+    # 防御性校验：columns 和 rows 维度必须一致
+    if not columns:
+        return {"type": "empty"}
+    if rows and any(len(row) < len(columns) for row in rows):
+        # 补齐缺失列，避免索引越界
+        rows = [row + [None] * (len(columns) - len(row)) for row in rows]
     if not rows:
         return {"type": "empty"}
 
